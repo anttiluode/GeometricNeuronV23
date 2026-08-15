@@ -28,14 +28,16 @@ The main execution workflows are:
 ```text
 .github/workflows/park-reproduce-gate.yml
 .github/workflows/park-readout-census.yml
+.github/workflows/park-published-fss-point.yml
 ```
 
 Successful runs at the time of this receipt:
 
 ```text
-supplement fetch/inspect   GitHub Actions run 31872229100
-phenotype reproduction    GitHub Actions run 31872543670
-500 um receiver census    GitHub Actions run 31872658435
+supplement fetch/inspect      GitHub Actions run 31872229100
+phenotype reproduction       GitHub Actions run 31872543670
+500 um receiver census       GitHub Actions run 31872658435
+stored FSSFFF point replay   GitHub Actions run 31872817613
 ```
 
 ## 2. Released-package rough edges encountered
@@ -248,7 +250,7 @@ with the remaining receivers mostly variants of the same alternating regime.
 
 The cleanest next known-answer calibration is now the **widefield alternating regime**, because it is much less sensitive to which ~500-um branch is chosen than the exact initial FSSFF prefix.
 
-Receiver policy for the next state-conditioned impedance gate should be fixed before looking at impedance results:
+Receiver policy for the next state-conditioned impedance gate is fixed before looking at impedance results:
 
 ```text
 A. soma
@@ -273,7 +275,7 @@ If the known history-dependent phenotype leaves almost no detectable change in t
 
 ---
 
-## 8. Additional predeclared published parameter point found in the supplement
+## 8. Predeclared stored phase-diagram point
 
 The released MATLAB file
 
@@ -281,7 +283,7 @@ The released MATLAB file
 Model Robustness/Figures/Figure_S19c-e/Plot_Phase_Diagrams.m
 ```
 
-contains the authors' stored parameter-scan outcomes and the simulation settings used for that scan.
+contains the authors' stored parameter-scan outcomes and comments giving the simulation settings.
 
 For the NaV-soma × NaV-dendrite scan it states:
 
@@ -306,9 +308,80 @@ the stored code is
 
 according to the legend in the same released file.
 
-This point was selected from the **authors' stored table before running it in V23**, so it is a legitimate predeclared follow-up rather than outcome tuning.
+This point was selected from the **authors' stored table before running it in V23**, so it was a legitimate predeclared reproduction attempt rather than outcome tuning.
 
-That follow-up is the next execution receipt.
+---
+
+## 9. P0b result: the stored `FSSFFF` table coordinate did not reproduce under our literal reconstruction
+
+Workflow:
+
+```text
+.github/workflows/park-published-fss-point.yml
+GitHub Actions run 31872817613
+```
+
+The run used the parameter values above exactly as written in the released MATLAB comments, plus the released `FullCA1Model` and Jarsky morphology.
+
+Observed:
+
+```text
+11 somatic spikes
+```
+
+rather than a six-event sequence matching the six-bit table encoding.
+
+At 490–510 um (`n=13`):
+
+```text
+FFFFFFFFFFF    5
+SSSSSSFFFFF    1
+SSSSSFFFFFF    2
+SSSFFFFFFFF    5
+```
+
+At 480–520 um (`n=24`):
+
+```text
+FFFFFFFFFFF   10
+SSSSSSFFFFF    3
+SSSSSFFFFFF    4
+SSSFFFFFFFF    7
+```
+
+At 450–550 um (`n=62`):
+
+```text
+FFFFFFFFFFF    22
+SSSSSSSFFFF     2
+SSSSSSFFFFF     7
+FSFFFFFFFFF      4
+SSSSSFFFFFF      7
+SSSFFFFFFFF     20
+```
+
+Number of receivers with literal `FSSFFF` pattern:
+
+```text
+0
+```
+
+### Interpretation
+
+This is a **failed reproduction of our reconstruction of the stored phase-scan coordinate**, not a contradiction of the paper.
+
+The released directory contains only the MATLAB table/plot file for this scan, not the exact script that generated the six-bit classifications. The six-bit code is also not self-consistent with the 11 soma spikes produced by the literal 100-ms step reconstruction, implying an unrecorded event-selection/classification detail or version difference.
+
+Therefore:
+
+```text
+DO NOT tune parameters until FSSFFF appears.
+DO NOT use this stored table coordinate as the chronology calibration.
+```
+
+The receiver-robust released **widefield period-doubling regime** remains the cleaner executable known-answer phenotype.
+
+This failure is retained because it prevents accidental outcome tuning.
 
 ---
 
@@ -318,4 +391,4 @@ That follow-up is the next execution receipt.
 
 ## One-line status
 
-> **P0 is qualitatively alive, but the exact 500-um monitor is receiver-ambiguous; use the robust widefield alternation and a predeclared receiver ensemble for the chronology kill gate rather than cherry-picking an FSS branch.**
+> **P0 is qualitatively alive, exact Fig. 4 / phase-table reproduction is receiver-or-version ambiguous, and the robust widefield alternation is now the predeclared calibration phenotype for the I0 state-conditioned transfer test.**
