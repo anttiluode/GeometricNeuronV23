@@ -1,0 +1,210 @@
+name: Park apical-only I1 correction
+
+on:
+  push:
+    paths:
+      - '.github/workflows/park-apical-i1-correction.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apical-i1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'neuron==8.2.2' numpy scipy
+
+      - name: Fetch exact Supplementary Software 1
+        shell: bash
+        run: |
+          set -euxo pipefail
+          URL='https://media.springernature.com/original/springer-static/esm/art%3A10.1038%2Fs41467-025-55819-9/MediaObjects/41467_2025_55819_MOESM7_ESM.zip'
+          curl -fL --retry 4 --retry-all-errors "$URL" -o park_software1.zip
+          unzip -q park_software1.zip -d park_software1
+          MODEL="$PWD/park_software1/Supplementary NEURON models/Conductance-based model"
+          echo "MODEL=$MODEL" >> "$GITHUB_ENV"
+
+      - name: Compile released mechanisms
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$MODEL"
+          rm -rf modfiles x86_64
+          mkdir modfiles
+          cp 'Model Robustness/ChannelsUsed/'*.mod modfiles/
+          cp 'Model Robustness/ChannelsUnused/'*.mod modfiles/
+          cp 'Model Robustness/ChannelsUsed/'*.inc modfiles/ 2>/dev/null || true
+          cp 'Model Robustness/ChannelsUnused/'*.inc modfiles/ 2>/dev/null || true
+          rm -f modfiles/cheriff.mod
+          nrnivmodl modfiles
+
+      - name: Re-run I1 with literature-correct distal apical receivers only
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$MODEL"
+          cp 'Model Robustness/parameters_list.py' ./parameters_list.py
+          cat > /tmp/park_apical_i1.py <<'PY'
+          import json, os, sys
+          import numpy as np
+          from neuron import h
+          sys.path.insert(0, os.getcwd())
+          from FullCA1Model import FullCA1Model
+          from parameters_list import setup_parameters
+
+          # CORRECTION RATIONALE FROZEN BEFORE RESULT:
+          # Park et al. describe the phenomenon as distal APICAL dendritic dSpikes
+          # and Fig. 4 wide-field illumination covers soma + APICAL trunk. The
+          # previous 490-510 um shell accidentally pooled apic[] and basal dend[]
+          # sections solely by path distance. This rerun uses only apic[] for both
+          # finite-amplitude classification and impedance summaries.
+          DT=0.025; RUN_NR=12; PRE=1.0
+          FREQS=[1.0,10.0,50.0,100.0]
+          DISTAL=(490.0,510.0); PROX=(90.0,110.0)
+          SUCCESS=0.80; FAILURE=0.20
+          NavIn=[1,0.6,300,100]; Kdr=[0.04,0.04,0,1]
+          tiny=[1e-9,1e-9,550,100]; CalH=[1e-9,1e-9,300,100]
+          Somacar=[1e-9,1e-9,50,30]; Nap=[1e-9,1e-9,300,100]
+          Hcn=[1e-9,1e-9,200,100]; Km=[1e-9,1e-9,550,100]
+
+          def clean():
+              for sec in list(h.allsec()): h.delete_section(sec=sec)
+
+          def build():
+              vals=setup_parameters(RUN_NR)
+              duration,stim_start,stim_end,Chr,syn,sim,out,wave,wpatch,patch,Nav,Kad,Kap,Cal,Car=vals
+              cp=[Nav,NavIn,Kap,Kad,Kdr,Chr,tiny,CalH,Cal,Somacar,Nap,tiny,Car,tiny,tiny,Hcn,Km]
+              model=FullCA1Model(cp,'Jarsky',100)
+              secs=list(h.allsec()); soma_sec=secs[0]; soma=soma_sec(0.5); h.distance(0,soma)
+              groups={'proximal_apical':[],'distal_apical':[]}
+              for sec in secs:
+                  if not sec.name().startswith('apic['): continue
+                  for seg in sec:
+                      d=float(h.distance(seg)); row=(sec.name(),float(seg.x),d,sec,seg)
+                      if PROX[0]<=d<=PROX[1]: groups['proximal_apical'].append(row)
+                      if DISTAL[0]<=d<=DISTAL[1]: groups['distal_apical'].append(row)
+              for g in groups.values(): g.sort(key=lambda z:(z[0],z[1]))
+              h.tstop=float(duration); h.dt=DT; h.celsius=35
+              times=np.arange(0,h.tstop+h.dt,h.dt); wave=np.asarray(wave,float)
+              n=min(len(times),len(wave)); times=times[:n]; wave=wave[:n]
+              model.prepare_simulation(times,np.tile(wave,(len(model.all),1)))
+              return model,secs,soma_sec,soma,groups,float(duration)
+
+          def soma_peaks(t,v):
+              ii=np.where((v[:-1]<0)&(v[1:]>=0))[0]+1; keep=[]
+              for i in ii:
+                  if not keep or t[i]-t[keep[-1]]>1: keep.append(int(i))
+              out=[]
+              for i in keep:
+                  lo=max(0,i-int(1/DT)); hi=min(len(t),i+int(5/DT)+1)
+                  out.append(lo+int(np.argmax(v[lo:hi])))
+              return out
+
+          # Pass 1: classify using distal apical receivers only.
+          clean(); model,secs,soma_sec,soma,groups,duration=build()
+          assert groups['distal_apical'] and groups['proximal_apical']
+          rt=h.Vector(); rt.record(h._ref_t); rs=h.Vector(); rs.record(soma._ref_v)
+          rv=[]
+          for *_,seg in groups['distal_apical']:
+              q=h.Vector(); q.record(seg._ref_v); rv.append(q)
+          h.finitialize(-73); h.v_init=-73; h.run()
+          t=np.asarray(rt); vs=np.asarray(rs); peaks=soma_peaks(t,vs)
+          patterns=[]; receiver_peaks=[]
+          for meta,q in zip(groups['distal_apical'],rv):
+              v=np.asarray(q); vals=[]
+              for sp in peaks:
+                  lo=max(0,sp-int(1/DT)); hi=min(len(t),sp+int(5/DT)+1)
+                  vals.append(float(np.max(v[lo:hi])))
+              patt=''.join('S' if z>-40 else 'F' for z in vals)
+              patterns.append(patt); receiver_peaks.append(dict(section=meta[0],x=meta[1],distance_um=meta[2],pattern=patt,peaks_mV=vals))
+          fracs=[]; labels=[]
+          for e in range(len(peaks)):
+              frac=float(np.mean([p[e]=='S' for p in patterns])); fracs.append(frac)
+              labels.append('success' if frac>=SUCCESS else 'failure' if frac<=FAILURE else 'mixed')
+          event_times=[float(t[p]) for p in peaks]
+          print('APICAL_GROUP_SIZES',{k:len(v) for k,v in groups.items()})
+          print('APICAL_EVENTS',list(zip(range(1,len(peaks)+1),event_times,fracs,labels)))
+          print('APICAL_PATTERNS',patterns)
+
+          # Pass 2 deterministic replay, source-normalized impedance.
+          clean(); model,secs,soma_sec,soma,g2,duration=build()
+          for k in groups:
+              assert [(a,b) for a,b,_,_,_ in groups[k]]==[(a,b) for a,b,_,_,_ in g2[k]]
+          h.finitialize(-73); h.v_init=-73
+          imp=h.Impedance(); imp.loc(soma.x,sec=soma_sec)
+          mm=[]
+          for ei,(pt,frac,label) in enumerate(zip(event_times,fracs,labels),1):
+              target=max(0.0,pt-PRE)
+              while h.t+0.5*DT<target: h.fadvance()
+              snapshot=float(h.t)
+              for freq in FREQS:
+                  for full in (0,1):
+                      err=None; gout={}; zin=None
+                      try:
+                          imp.compute(freq,full); zin=float(imp.input(soma.x,sec=soma_sec))
+                          for gn,items in g2.items():
+                              vals=[]
+                              for secname,x,d,sec,seg in items:
+                                  amp=float(imp.transfer(seg.x,sec=sec))
+                                  vals.append(dict(section=secname,x=x,distance_um=d,amp=amp,norm=amp/max(zin,1e-300),phase=float(imp.transfer_phase(seg.x,sec=sec))))
+                              gout[gn]=vals
+                      except Exception as exc: err=repr(exc)
+                      mm.append(dict(event=ei,label=label,frac=frac,peak_t_ms=pt,snapshot_t_ms=snapshot,freq=freq,extended=bool(full),zin=zin,error=err,groups=gout))
+
+          summaries=[]
+          for full in (False,True):
+              for freq in FREQS:
+                  rows=[]
+                  for m in mm:
+                      if m['extended']!=full or m['freq']!=freq or m['error']: continue
+                      z={'event':m['event'],'label':m['label'],'zin':m['zin']}
+                      for gn in ('proximal_apical','distal_apical'):
+                          a=np.array([r['norm'] for r in m['groups'][gn]],float)
+                          z[gn]=float(np.mean(np.log(np.maximum(a,1e-300))))
+                      rows.append(z)
+                  suc=[z for z in rows if z['label']=='success']; fail=[z for z in rows if z['label']=='failure']
+                  out=dict(extended=full,freq_Hz=freq,n_success=len(suc),n_failure=len(fail),n_mixed=sum(z['label']=='mixed' for z in rows))
+                  if suc and fail:
+                      def rat(field): return float(np.exp(np.mean([z[field] for z in suc])-np.mean([z[field] for z in fail])))
+                      out['soma_input_ratio']=float(np.mean([z['zin'] for z in suc])/np.mean([z['zin'] for z in fail]))
+                      out['proximal_apical_norm_ratio']=rat('proximal_apical')
+                      out['distal_apical_norm_ratio']=rat('distal_apical')
+                      ds=np.mean([z['distal_apical']-z['proximal_apical'] for z in suc]); df=np.mean([z['distal_apical']-z['proximal_apical'] for z in fail])
+                      out['distal_specific_ratio']=float(np.exp(ds-df))
+                  summaries.append(out); print('APICAL_I1_SUMMARY',json.dumps(out,separators=(',',':')))
+
+          # Receiverwise extended/basic 1Hz ratios, using apical labels only.
+          rr=[]
+          for full in (False,True):
+              rows=[m for m in mm if m['extended']==full and m['freq']==1.0 and not m['error']]
+              suc=[m for m in rows if m['label']=='success']; fail=[m for m in rows if m['label']=='failure']
+              if not suc or not fail: continue
+              for ri,(secname,x,d,_,_) in enumerate(g2['distal_apical']):
+                  sl=np.mean([np.log(max(m['groups']['distal_apical'][ri]['norm'],1e-300)) for m in suc]); fl=np.mean([np.log(max(m['groups']['distal_apical'][ri]['norm'],1e-300)) for m in fail])
+                  rr.append(dict(extended=full,section=secname,x=x,distance_um=d,ratio=float(np.exp(sl-fl))))
+          print('APICAL_RECEIVER_RATIOS_1HZ',json.dumps(rr,separators=(',',':')))
+
+          result=dict(rationale='literature-correct distal apical only',group_sizes={k:len(v) for k,v in groups.items()},event_times_ms=event_times,success_fracs=fracs,labels=labels,receiver_peaks=receiver_peaks,measurements=mm,summaries=summaries,receiver_ratios_1Hz=rr)
+          json.dump(result,open('/tmp/park_apical_i1.json','w'),indent=2)
+          PY
+          python /tmp/park_apical_i1.py | tee /tmp/park_apical_i1.log
+
+      - name: Upload correction receipt artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: park-apical-i1-correction
+          path: |
+            /tmp/park_apical_i1.json
+            /tmp/park_apical_i1.log
+          if-no-files-found: error
+          retention-days: 14
