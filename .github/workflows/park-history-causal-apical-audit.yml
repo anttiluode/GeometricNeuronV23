@@ -1,0 +1,60 @@
+name: Park causal controls apical-only audit
+
+on:
+  push:
+    paths:
+      - '.github/workflows/park-history-causal-apical-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download frozen causal-control artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir causal
+          gh run download 31873317216 -n park-history-causal-controls -D causal
+          find causal -type f -maxdepth 2 -print
+
+      - name: Reclassify only distal apical receivers
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import numpy as np
+          p=next(Path('causal').rglob('park_history_controls.json'))
+          x=json.load(open(p))
+          out=[]
+          for arm in x['results']:
+              rec=[r for r in arm['receiver_patterns'] if r['section'].startswith('apic[')]
+              n=len(rec); nev=arm['n_soma_spikes']; fr=[]; labs=[]
+              for e in range(nev):
+                  f=float(np.mean([r['pattern'][e]=='S' for r in rec])); fr.append(f)
+                  labs.append('success' if f>=.8 else 'failure' if f<=.2 else 'mixed')
+              z=dict(name=arm['name'],n_apical_receivers=n,n_soma_spikes=nev,
+                     apical_patterns=[dict(section=r['section'],x=r['x'],distance_um=r['distance_um'],pattern=r['pattern']) for r in rec],
+                     success_fractions=fr,labels=labs,
+                     consensus=''.join('S' if q=='success' else 'F' if q=='failure' else 'M' for q in labs))
+              out.append(z)
+              print('APICAL_CAUSAL',json.dumps(z,separators=(',',':')))
+          json.dump(dict(results=out),open('/tmp/park_history_causal_apical_audit.json','w'),indent=2)
+          PY
+
+      - name: Upload audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: park-history-causal-apical-audit
+          path: /tmp/park_history_causal_apical_audit.json
+          if-no-files-found: error
+          retention-days: 14
