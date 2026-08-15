@@ -1,0 +1,50 @@
+name: Joint address x STP POC v02 true seeds
+
+on:
+  push:
+    paths:
+      - '.github/workflows/joint-address-stp-poc-v02.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  poc-v02:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          python -m pip install numpy scipy
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Apply audited seed fix to a temporary copy
+        shell: bash
+        run: |
+          cp joint_address_stp_poc.py /tmp/joint_address_stp_poc_v02.py
+          # v01 accidentally created its own Generator(seed=12345) inside every
+          # model, making the nominal model seeds identical.  For this audited
+          # rerun, use fit_variant's already-declared torch.manual_seed(seed).
+          sed -i '/g = torch.Generator().manual_seed(12345)/d' /tmp/joint_address_stp_poc_v02.py
+          sed -i 's/torch.randn(C, generator=g)/torch.randn(C)/g' /tmp/joint_address_stp_poc_v02.py
+          grep -n 'raw_[udf].*=.*torch.randn' /tmp/joint_address_stp_poc_v02.py
+      - name: Run 3 genuinely different initializations
+        run: |
+          python /tmp/joint_address_stp_poc_v02.py \
+            --seeds 3 \
+            --shuffles 60 \
+            --train-repeats 4 \
+            --test-repeats 10 \
+            --output /tmp/joint_address_stp_poc_v02_result.json \
+            | tee /tmp/joint_address_stp_poc_v02.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: joint-address-stp-poc-v02
+          path: |
+            /tmp/joint_address_stp_poc_v02_result.json
+            /tmp/joint_address_stp_poc_v02.log
+          retention-days: 14
