@@ -1,29 +1,81 @@
 # GeometricNeuronV23 — CURRENT HANDOFF
 
-**Updated:** 2026-08-15, fifth pass — **Park calibration reached a data-driven stopping point**
+**Updated:** 2026-08-15, sixth pass — passive address × STP closed; nonlinear gate launched; growth reframed as access geometry
 
 **Status:** active falsification/discovery program. Nothing here is a novelty claim.
 
 ## Read in this order
 
-1. `PARK_APICAL_STATE_SHUFFLE_RECEIPT.md` — latest cheap geometry × history kill gate.
-2. `PARK_APICAL_I1_CORRECTION.md` — correct distal-apical receiver analysis; supersedes the mixed apical/basal I1 interpretation.
-3. `PARK_HISTORY_CAUSAL_RECEIPT.md` — channel-history causal controls, corrected to distal apical receivers.
-4. `PARK_TWO_COMPARTMENT_CONTROL_RECEIPT.md` — author-released minimal control; detailed morphology is not required for the broad Park phenotype.
-5. `PARK_P0_EXECUTION_RECEIPT.md` — exact supplement execution/provenance and failed phase-table reproduction kept intact.
-6. `GEOMETRY_STATE_COMMUTATOR_V02.md`, `FULL_STATE_GEOMETRY_HISTORY_DECOMPOSITION.md`, `CHRONOLOGY_LOCALITY.md` — mathematical nulls / possible later closure tools.
-7. `chronology_probe.py`, `chronology_decompose.py`, `geometry_state_commutator_v02.py` — analysis utilities.
-8. `OPERATOR_ATLAS_HYPOTHESIS.md`, `SPACETIME_SEPARABILITY_GATE.md` — upstream lineage.
-
-The original `GEOMETRY_STATE_COMMUTATOR.md` / `geometry_state_commutator.py` are v0.1 shorthand. Prefer v0.2.
+1. `JOINT_ADDRESS_STP_ORDER_POC_V02_RECEIPT.md` — strongest current passive-tree result: three-seed strict shuffle null.
+2. `GROWTH_AS_ADAPTIVE_SAMPLING_COLLISION.md` — literature collision for dendritic/spine growth as acquiring new input streams.
+3. `MORPHOLOGY_AS_ACCESS_GEOMETRY.md` — separates online transfer geometry from geometry of physically reachable synaptic partners.
+4. `joint_address_stp_nonlinear_poc.py` — current local-voltage-feedback kill gate.
+5. `JOINT_ADDRESS_STP_COLLISION.md` — prior-art boundary around joint address × full STP.
+6. `PARK_APICAL_STATE_SHUFFLE_RECEIPT.md`, `PARK_APICAL_I1_CORRECTION.md`, `PARK_HISTORY_CAUSAL_RECEIPT.md`, `PARK_TWO_COMPARTMENT_CONTROL_RECEIPT.md` — Park calibration / negative narrowing.
+7. `GEOMETRY_STATE_COMMUTATOR_V02.md`, `FULL_STATE_GEOMETRY_HISTORY_DECOMPOSITION.md`, `CHRONOLOGY_LOCALITY.md` — mathematical nulls, now closure tools rather than discovery priority.
 
 ---
 
 # Executive status
 
-The Park 2025 branch did what a calibration branch should do: it **removed most of the exciting interpretation before we spent heavily on it**.
+Two different geometry hypotheses have now been separated.
 
-What survives:
+## A. Fixed morphology as an online soma transfer machine
+
+Current evidence is mostly negative in the passive / weak-interaction regime:
+
+```text
+passive soma transfer dictionary             nearly separable
+Park detailed history-state address          not privileged for tested metric
+passive address × learned STP                 strict shuffle null
+balanced passive address × STP, 3 seeds       strict shuffle null
+```
+
+The strongest executed passive address × STP result is:
+
+```text
+balanced forward/reverse task
+3 independent seeds
+60 strict within-afferent STP-tuple shuffles per seed
+
+TREE:
+fixed loss mean               0.5493544   acc 1.0
+location-only                 0.2873722   acc 1.0
+STP-only                      0.2771257   acc 1.0
+joint                         0.1240620   acc 1.0
+
+joint shuffle loss ratio      1.0000005806
+baseline/shuffled acc         1.0 / 1.0
+```
+
+So spatial filtering and temporal synaptic state can both be useful while **not becoming mutually specialized**. The joint optimizer mostly specialized temporal dynamics by afferent identity, not by exact dendritic address.
+
+Do not tune the passive task or add diversity rewards to manufacture a placement effect.
+
+## B. Morphology as access/search geometry
+
+The growth discussion exposes a role today's electrical nulls do not test:
+
+```text
+morphology -> which axons/boutons are physically reachable
+           -> which new input streams structural plasticity can acquire
+```
+
+This is established neurogeometry territory (`potential synapses`; Stepanyants/Chklovskii) and established structural plasticity, not a novelty claim.
+
+Hedrick et al. 2022 is strikingly close to the naive “new viewpoint” intuition: learning-related filopodia locally sample adjacent neuropil for candidate axonal partners, and a majority of surviving new spines contact axons previously unrepresented in those dendritic domains.
+
+Pitcher et al. 2026 provides actual growth feedback: developing starburst dendrites compute retinal-wave direction, and that local computation biases subsequent dendritic growth.
+
+Thus the tree can be weak as a passive temporal operator at one receiver while still being important as a **physical search manifold over possible connectivity**.
+
+---
+
+# Park branch: stopped correctly
+
+Exact Park 2025 public software was fetched, compiled and executed in NEURON.
+
+What survived:
 
 ```text
 local history matters strongly                         YES
@@ -34,329 +86,215 @@ detailed history-state address strongly enhances it     NO
 detailed tree required for broad accelerometer motif    NO
 ```
 
-Therefore:
-
-> **Do not make the full Park Jacobian / Magnus decomposition the next discovery bet.**
-
-It remains available as a closure analysis, but the cheaper controls have already made the core mechanism look much closer to **local history + coupling** than to a special detailed-morphology chronology.
-
-The next discovery effort should move to the narrower literature seam around **joint synaptic address × temporal dynamics optimization**, after one more hard prior-art collision.
+The author-released two-compartment model already produces the qualitative history-dependent window. Path-distance-matched apical state-address shuffles did not show the real detailed arrangement to be privileged. Therefore the full Jacobian/Magnus decomposition remains optional mechanistic closure, not the next discovery bet.
 
 ---
 
-# 1. Original mathematical hypothesis, now downgraded
+# Joint address × STP prior-art boundary
 
-The candidate was:
-
-> Local history makes the neuron's incremental operator vary in time, and morphology determines whether the resulting chronological transformations remain distinguishable at a chosen receiver.
-
-For a compartment model:
+Already occupied:
 
 ```text
-A(t) = S + Q(t)
+realistic dendrite + learned STP                  Carvalho & Buonomano 2011
+learned STP shuffle                               Carvalho & Buonomano 2011 / later work
+learn full temporal STP parameters                Buonomano et al. 2026 preprint
+optimize synaptic location + strength             TwinProp 2026 preprint
+biological spatial STP gradients                  established
 ```
 
-and exactly:
+Still not found in the literature pass as one closed package:
 
 ```text
-[A_a,A_b]
- = [S,Q_b-Q_a] + [Q_a,Q_b].
+realistic morphology
+x jointly optimized synaptic address
+x jointly optimized full presynaptic STP kinetics
+x strict post-training temporal-tuple/address shuffle
+x analysis against receiver-transfer coordinates
 ```
 
-Bookkeeping:
-
-```text
-[S,Q_b-Q_a]     morphology × changing-local-state chronology
-[Q_a,Q_b]       intrinsic local chronology possible in a point neuron
-```
-
-This algebra remains correct and useful. But Park no longer gives strong empirical reason to expect the first term to be a large hidden discovery mechanism in this phenomenon.
+But the synthetic passive gate says **do not port this straight to a huge realistic passive cell**. Passive filtering did not create the interaction.
 
 ---
 
-# 2. Exact Park code was executed
+# Important correction to the too-negative interpretation
 
-The exact public Supplementary Software 1 was fetched from Springer Nature, compiled, and run under Python 3.10 / NEURON 8.2.2.
+Today's results do **not** justify saying “dendritic shape is useless.”
 
-Successful provenance / execution runs include:
+TwinProp's 2026 preprint reports on 4-bit parity:
 
 ```text
-supplement fetch/inspect       31872229100
-phenotype reproduction        31872543670
-500-um receiver census        31872658435
-stored table replay           31872817613
-I0 state-conditioned impedance 31872873718
-I1 source-normalized impedance  31873026312
-I1 heterogeneity audit          31873287254
-channel-history controls        31873317216
-apical-only I1 correction       31873436618
-apical state-address shuffle    31873551235
-apical causal audit             31873584518
+intact L5PC                         99.4%
+passive dendrites, NMDA retained    78.1%
+soma-only, channels+NMDA retained   76.9%
+no NMDA, channels retained          73.8%
+LIF                                 68.8%
 ```
 
-Package rough edges and failed reproduction details are preserved in `PARK_P0_EXECUTION_RECEIPT.md`. No active channel equation was edited to make the model run.
+Their interpretation is interaction: **NMDA synaptic nonlinearities + voltage-gated dendritic conductances acting on morphology**. Neither passive morphology+NMDA nor voltage-gated channels without NMDA is enough.
+
+So the earned negative is narrower:
+
+> passive / nearly separable geometry does not create strong address × temporal-state binding in our tests.
+
+The active interacting-nonlinearity regime remains live.
 
 ---
 
-# 3. The important anatomical correction
+# Current executable gate: local voltage-dependent feedback
 
-The primary Park paper concerns **distal apical dendrites**. The first V23 receiver shell had been selected by path distance alone and accidentally pooled `apic[]` with basal `dend[]` sections.
+`joint_address_stp_nonlinear_poc.py` adds the smallest possible mechanism that can break passive separability without pretending to be a biological NMDA model.
 
-That mattered enormously.
-
-The old mixed-shell 1-Hz extended result appeared to show:
+For every candidate site it computes:
 
 ```text
-distal normalized success/failure     ~2.116 x
-distal-specific diff-of-diff           ~2.200 x
+source -> same-site local voltage kernel
+source -> soma transfer kernel
 ```
 
-The literature-correct apical-only rerun gives:
+Source-to-soma kernels remain area-normalized. Local kernels preserve relative input-impedance differences (one global scaling only).
+
+The model then applies:
 
 ```text
-proximal apical receivers    n=5
-distal apical receivers      n=8
-
-1-Hz extended:
-soma input ratio             1.1235 x
-proximal normalized          1.0329 x
-distal normalized            1.1443 x
-distal-specific              1.1079 x
-
-10-Hz distal-specific        1.1182 x
+STP release
+ -> local voltage
+ -> global smooth threshold / regenerative current
+ -> propagation from that same site to soma
 ```
 
-So the dramatic ~2.2x effect was largely a receiver-definition / weak-basal-visibility artifact. The corrected biologically relevant effect is modest.
+Threshold is calibrated **before training** from the median candidate-site response to a canonical homogeneous fixed-STP burst. It is not fitted to the task or shuffle effect.
 
-This correction is frozen in `PARK_APICAL_I1_CORRECTION.md`.
+Matched arms:
+
+```text
+tree_linear                 beta=0
+
+tree_nonlinear              beta=2
+
+isopotential_nonlinear      beta=2
+```
+
+Same variants and strict within-afferent `(U,tau_D,tau_F)` tuple shuffle as the passive test. No forced location diversity.
+
+GitHub Actions run launched:
+
+```text
+31883664252
+```
+
+At the time of this handoff it is still executing. Do not infer an outcome until the receipt exists.
+
+Kill logic:
+
+```text
+nonlinear tree shuffle ~= 1
+    -> simple threshold feedback is insufficient; do not tune it to win
+    -> next biological gate should use interacting NMDA + active dendritic conductance
+
+nonlinear tree shuffle departs materially from 1
+AND isopotential remains invariant
+    -> replicate across seeds and threshold/beta ranges before interpretation
+```
 
 ---
 
-# 4. Channel history is nevertheless causally real
+# Growth / “new viewpoint” idea
 
-On the correct eight distal-apical receivers, baseline widefield gives:
+The broad idea already has strong prior art.
 
-```text
-SSSFSFSFSFSFS
-```
-
-consensus over 13 somatic spikes.
-
-### Remove slow NaV inactivation drive
-
-Released `na3.mod` allows the slow-inactivation drive to be disabled by setting the relevant asymptote to 1 while retaining the Na current and fast gates.
-
-Result:
+### Hedrick et al. 2022, Nature Neuroscience
 
 ```text
-13 somatic spikes
-8/8 distal-apical receivers: SSSSSSSSSSSSS
+existing task-related cluster potentiates
+ -> local filopodia grow
+ -> sample nearby neuropil / candidate axons
+ -> co-active contacts stabilize
+ -> majority of new spines contact axons previously unrepresented in the domain
 ```
 
-No failures remain.
+This is almost a literal biological “acquire another input stream” mechanism.
 
-### Remove A-type Kv conductance
+### Pitcher et al. 2026, Cell Reports
 
-Result:
+Developing starburst dendrites decode the propagation direction of retinal waves and convert that computation into biased dendritic growth. Thus:
 
 ```text
-9 somatic spikes
-8/8 distal-apical receivers: SSSSSSSSS
+current computation -> growth direction -> future morphology -> future computation
 ```
 
-Again no failures.
+### Levy & Baxter 2023, Neural Networks
 
-Therefore the known Park history mechanisms genuinely control the finite-amplitude distal-apical phenotype. See `PARK_HISTORY_CAUSAL_RECEIPT.md`.
+Direct computational collision: dendritogenesis + adaptive synaptogenesis, with dendrites added as novel experiences/latent mixture components accumulate; improved capacity / reduced catastrophic interference / mixture unmixing.
 
-What they do **not** establish is a special role for detailed morphology.
+Therefore do not claim “grow dendrites for new data/views” as new.
+
+The sharper possible question is:
+
+> **Does local computation/error control structural exploration so that growth acquires physically reachable input streams carrying conditional information missing from the current local representation, and does nonlinear dendritic/receiver context change that acquisition policy?**
+
+That needs another literature collision before an expensive build.
 
 ---
 
-# 5. Park's own two-compartment model is the strongest conceptual control
+# Transfer geometry vs access geometry
 
-Exact Supplementary Software 2 was also fetched/executed.
-
-The author-released coarse system has approximately:
+Keep these separate:
 
 ```text
-one soma compartment
-one dendrite compartment
-one coupling edge
-one dendritic adaptation/recovery variable
+transfer geometry
+    what morphology does to an already connected signal
+
+access geometry
+    which presynaptic signals morphology makes physically connectable
 ```
 
-and already generates a transient dendritic-spike window while soma spiking continues.
+Stepanyants et al. 2008 estimated multiple potential synaptic targets within spine reach in cortical/hippocampal neuropil and treated this geometry as a reservoir for structural rewiring. So access geometry is established.
 
-V23 controls:
-
-```text
-freeze dendritic recovery u2
-    -> closing of the transient window disappears
-
-remove soma-dendrite coupling
-    -> soma drive no longer produces stimulus-related dendritic events
-```
-
-So the broad Park logic is already:
-
-```text
-local history + coupling -> history-conditioned accessibility
-```
-
-without a detailed tree.
-
-This means the detailed morphology had to earn something **above** the qualitative phenotype. See `PARK_TWO_COMPARTMENT_CONTROL_RECEIPT.md`.
+Today's electrical nulls bear mainly on transfer geometry. They do **not** show that arbor geometry is irrelevant to connectivity opportunity.
 
 ---
 
-# 6. Direct apical history-state address shuffle: mostly negative
+# Receiver hypothesis: still interesting but crowded
 
-This was the decisive cheap gate before full Magnus.
+Starburst amacrine biology strongly supports receiver-relative local computation: branch calcium/output can be direction selective even when somatic voltage is not.
 
-At each fixed baseline snapshot:
+But do not claim ANN units universally have one scalar output. Multi-output dendritic artificial neurons already exist (e.g. Ding et al., Knowledge-Based Systems 2024), as do vector-valued units and many multi-branch/multi-head architectures.
 
-```text
-receiver        distal apic[] 490-510 um, n=8
-source          soma
-frequency       1 Hz
-metric          extended impedance, normalized by soma input
-apical segments 537
-shuffle bins    50 um path-distance bins
-seeds           10 fixed seeds
-```
-
-The exact gate-state multiset was preserved. Only address changed.
-
-Baseline real spatial assignment:
+A narrower future test could hold total state and parameter budget fixed and compare:
 
 ```text
-success/failure ratio = 1.1443439 x
+one pooled soma-like receiver
+vs
+K receiver-specific local branch projections
 ```
 
-### Slow NaV state address
+then ask whether structural growth becomes more useful when newly acquired branch information is not immediately collapsed through one output bottleneck.
 
-Path-bin shuffles:
-
-```text
-mean   1.1397866
-range  1.1393221 - 1.1403098
-```
-
-The real assignment is slightly larger, but only by about 0.0046 ratio units. This is tiny.
-
-### A-type state address
-
-Path-bin shuffles:
-
-```text
-mean   1.1639469
-range  1.1488663 - 1.1778896
-```
-
-**All ten shuffles produce a larger contrast than the real assignment.**
-
-### Joint slow-NaV + A-type
-
-```text
-mean   1.1606086
-range  1.1452640 - 1.1748900
-```
-
-Again all ten are at or above the real assignment.
-
-Interpretation:
-
-> The real detailed apical history-state address is not strongly responsible for the measured operator contrast; for A-type state it certainly is not arranged to maximize that contrast.
-
-This is only a snapshot/local-linearization test and not a finite-amplitude shuffled trajectory. But it is sufficiently negative that the expensive full chronology decomposition no longer has priority as a discovery experiment.
-
-See `PARK_APICAL_STATE_SHUFFLE_RECEIPT.md`.
+This exact intersection needs prior-art collision before execution.
 
 ---
 
-# 7. Park branch verdict
-
-Do **not** claim:
+# Current decision tree
 
 ```text
-detailed dendritic geometry creates the spike-rate accelerometer
-history-state spatial address strongly amplifies the Park transfer contrast
-Park validates the GeometricNeuron chronology hypothesis
+1. Wait only for the already-running local-nonlinearity gate result.
+
+2a. If null:
+      stop synthetic threshold tuning.
+      move to a biologically grounded NMDA + active-conductance interaction.
+
+2b. If positive with controls:
+      replicate across seeds and predeclared threshold/beta range.
+      only then port to a realistic neuron.
+
+3. Keep growth as a separate structural-sampling branch:
+      morphology may matter by changing what the neuron can connect to,
+      not because passive soma transfer is rich.
+
+4. Before building a growth+multi-receiver architecture, collide the exact
+   intersection against structural-plasticity and multi-output-neuron literature.
 ```
 
-The earned statement is narrower:
+## Current one-line state
 
-> **Park validates a powerful local-history-plus-coupling mechanism. The detailed apical tree produces a modest state-conditioned transfer difference, but our direct path-matched address shuffle does not reveal a strong privileged spatial organization of the identified history gates for that metric.**
-
-This does not globally falsify morphology × history in neurons. It says **Park is not the strong calibration win we hoped it might be**.
-
-The correct stopping action is to move the discovery budget elsewhere unless a new Park-specific prediction appears.
-
----
-
-# 8. Optional closure, not next priority
-
-The full machinery still exists:
-
-```text
-short-window A(t)
-direct Phi
-Omega_1
-Omega_2
-Omega_2^geom vs Omega_2^local
-physical source / receiver projections
-```
-
-It could quantify exactly how much pairwise chronology is local versus morphology-dependent.
-
-But if run now it should be labelled **mechanistic closure**, not a discovery hunt. The cheap empirical gates already bound the likely payoff.
-
----
-
-# 9. Next discovery seam: joint address × temporal synapse dynamics
-
-Current literature collision has already killed several broad claims:
-
-```text
-morphology matters for neuron computation                 prior art
-learn STP temporal parameters                             prior art
-learn synaptic location / strength in detailed neuron     TwinProp 2026
-learn STP in a realistic multicompartment neuron          Carvalho/Buonomano 2011 lineage
-optimize morphology/channel distribution for sequence     Torben-Nielsen/Stiefel 2009
-```
-
-The candidate unclosed intersection is narrower:
-
-```text
-fixed realistic morphology
-    x jointly trainable synaptic ADDRESS
-    x jointly trainable presynaptic STP dynamics
-        (U, tau_D, tau_F)
-```
-
-and then ask whether learned temporal dynamics organize by **receiver transfer geometry** rather than simply by raw distance.
-
-Required controls before any claim:
-
-```text
-learned address + fixed STP
-fixed address + learned STP
-learned all, then shuffle learned STP labels across addresses
-path-distance-matched STP shuffle
-isopotential / response-matched morphology control
-same parameter/state budget
-```
-
-The passive delay-pairing/rearrangement lemma remains only a null because passive cable-delay spread is small relative to normal STP time scales.
-
-Before writing the optimization harness, collide the exact joint seam once more with primary literature.
-
----
-
-# Current decision
-
-> **Park branch: stop escalation. Preserve it as a clean negative/narrowing result.**
-
-> **Next: literature collision on joint synaptic address × full STP dynamics in a fixed realistic morphology. If still open, build the smallest runnable optimization harness with a shuffle control before writing more theory.**
-
-This is the handoff state.
+> **The passive tree did not bind temporal synapse state to address. The next online-computation gate is local voltage feedback; separately, the growth idea has reopened geometry in a different role — as the physical search space over which new input streams can be acquired.**
