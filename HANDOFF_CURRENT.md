@@ -1,19 +1,18 @@
 # GeometricNeuronV23 — CURRENT HANDOFF
 
-**Updated:** 2026-08-15, third pass
+**Updated:** 2026-08-15, fourth pass — **Park code now executed**
 
 **Status:** active falsification program. Nothing here is a novelty claim.
 
 ## Read in this order
 
-1. `HANDOFF_NONCOMMUTING_DENDRITES.md` — literature collision and Park calibration ladder.
-2. `GEOMETRY_STATE_COMMUTATOR_V02.md` — corrected capacitance-normalized voltage-only null.
-3. `FULL_STATE_GEOMETRY_HISTORY_DECOMPOSITION.md` — exact full-state local-vs-morphology chronology split.
-4. `CHRONOLOGY_LOCALITY.md` — graph-distance / short-time support guardrail.
-5. `chronology_probe.py` — time-ordered propagator vs first/second Magnus diagnostic.
-6. `chronology_decompose.py` — second-Magnus geometry-history vs local decomposition.
-7. `geometry_state_commutator_v02.py` — capacitance-normalized voltage-only edge probe.
-8. `OPERATOR_ATLAS_HYPOTHESIS.md`, `SPACETIME_SEPARABILITY_GATE.md` — upstream lineage.
+1. `PARK_P0_EXECUTION_RECEIPT.md` — **actual published supplement execution and receiver census. Start here.**
+2. `HANDOFF_NONCOMMUTING_DENDRITES.md` — literature collision and original Park calibration ladder.
+3. `GEOMETRY_STATE_COMMUTATOR_V02.md` — capacitance-normalized voltage-only null.
+4. `FULL_STATE_GEOMETRY_HISTORY_DECOMPOSITION.md` — local-vs-morphology chronology split.
+5. `CHRONOLOGY_LOCALITY.md` — graph-distance / short-time support guardrail.
+6. `chronology_probe.py`, `chronology_decompose.py`, `geometry_state_commutator_v02.py` — analysis utilities.
+7. `OPERATOR_ATLAS_HYPOTHESIS.md`, `SPACETIME_SEPARABILITY_GATE.md` — upstream lineage.
 
 The original `GEOMETRY_STATE_COMMUTATOR.md` / `geometry_state_commutator.py` are v0.1 shorthand. Prefer v0.2.
 
@@ -31,296 +30,279 @@ Current candidate:
 
 > **Local history makes the neuron's incremental operator vary in time, and morphology determines whether the resulting chronological transformations remain distinguishable at a chosen receiver.**
 
-For a nonlinear trajectory,
+For a detailed trajectory:
 
 ```text
 d(delta x)/dt = A(t) delta x + B(t) delta u
 delta y        = C_R(t) delta x
+H_R(t,s)       = C_R(t) Phi(t,s) B(s)
 ```
 
 with
 
 ```text
-H_R(t,s) = C_R(t) Phi(t,s) B(s)
-Phi      = Texp integral A(t) dt.
+Phi = Texp integral A(t) dt.
 ```
 
-First chronology-erased Magnus surrogate:
+Compare against the chronology-erased first-Magnus surrogate
 
 ```text
 Phi_1 = exp(integral A(t) dt).
 ```
 
-Second Magnus term:
-
-```text
-Omega_2 = 1/2 integral dt1 integral^t1 dt2 [A(t1),A(t2)].
-```
-
-This is standard mathematics. Comparing `Phi` and `Phi_1` on a fixed baseline trajectory measures **incremental chronological sensitivity**, not yet causal task computation.
+This diagnoses incremental chronological sensitivity around the same nonlinear trajectory. It is not by itself a causal removal of computation.
 
 ---
 
-## First exact null: voltage-only morphology × changing local state
+## Exact decomposition that the hypothesis must survive
 
-Begin with
-
-```text
-C dv/dt = -(G_ax + G_m(t)) v.
-```
-
-After capacitance normalization `z=C^(1/2)v`:
-
-```text
-dz/dt = -(L + D(t)) z
-L      = C^(-1/2) G_ax C^(-1/2)
-D(t)   = diag(G_m,i(t)/C_i).
-```
-
-For two states:
-
-```text
-[A_a,A_b] = [L,D_b-D_a]
-[A_a,A_b]_ij = L_ij (Delta d_j - Delta d_i).
-```
-
-For reciprocal axial coupling:
-
-```text
-||[A_a,A_b]||_F^2
- = 2 sum_edges [g_ij^2/(C_i C_j)]
-   [Delta(G_m,j/C_j)-Delta(G_m,i/C_i)]^2.
-```
-
-So the lowest-order voltage-only chronology source is exactly an **edge-weighted spatial roughness of change in incremental membrane rate**.
-
-It is not raw channel amount and not a raw gating variable.
-
-Harsh controls:
-
-```text
-real state field
-random site shuffle
-branch-preserving shuffle
-path-distance-bin shuffle
-smoothed same mean/variance field
-uniform same mean field
-```
-
-The path-bin control is mandatory where known proximal-distal channel gradients exist.
-
----
-
-## New exact full-state decomposition
-
-For a conventional compartmental model with fixed axial coupling and local membrane/gating/synaptic mechanisms, split the trajectory Jacobian as
+For a conventional compartmental model with fixed axial coupling and local channel/synaptic dynamics,
 
 ```text
 A(t) = S + Q(t)
 ```
 
-where
-
-```text
-S       fixed spatial / axial morphology operator
-Q(t)    local state-dependent dynamics
-```
-
-and, when mechanisms are local,
-
-```text
-Q(t) = blockdiag(Q_1(t),...,Q_N(t)).
-```
-
-Then for two times `a,b`:
+and exactly
 
 ```text
 [A_a,A_b]
  = [S,Q_b-Q_a] + [Q_a,Q_b].
 ```
 
-This is exact algebra.
-
-Interpretation:
+Bookkeeping interpretation:
 
 ```text
 [S,Q_b-Q_a]     morphology × changing-local-state chronology
-[Q_a,Q_b]       intrinsic local chronology that could exist in a point neuron
+[Q_a,Q_b]       intrinsic local chronology possible in a point neuron
 ```
 
-This matters enormously for the V23 claim. A neuron can have strong chronological/noncommuting dynamics entirely because its local channel system is stateful; morphology may contribute nothing special. We must separate the two.
-
-At second Magnus order the split remains exact:
+At second Magnus order the pairwise chronological term separates correspondingly into
 
 ```text
-Omega_2 = Omega_2^geom + Omega_2^local.
+Omega_2^geom + Omega_2^local.
 ```
 
-`chronology_decompose.py` implements the pairwise decomposition and identity check. Raw matrix norms remain coordinate dependent; final interpretation must use physical source/receiver projections.
+A neuron can therefore be strongly history dependent while geometry contributes little. That is the principal falsifier.
 
-This decomposition is standard operator algebra / reaction-diffusion territory, not a novelty claim. Descombes et al. (SIAM J. Numer. Anal. 2014) is one guardrail showing Lie/commutator analysis of reaction–diffusion operator splitting is established mathematics.
+The simplest capacitance-normalized voltage-only case reduces to
+
+```text
+[A_a,A_b]_ij = L_ij (Delta d_j - Delta d_i)
+```
+
+so the first morphology/history source is an edge-weighted roughness of the **change in local incremental membrane rate**, not raw channel amount.
 
 ---
 
-## Locality guardrail
+# PARK 2025 EXECUTION STATUS
 
-The voltage-only first commutator is edge-local. Additional nested commutators/products can extend support only through additional cable factors.
+## The previous blocker is gone
 
-Established graph heat-kernel theory (Keller et al. 2016) shows that short-time transfer between graph vertices at combinatorial distance `r` begins at order roughly `t^r`.
+The exact public **Supplementary Software 1** from Park et al. (Nature Communications 2025) has now been fetched, compiled, and run in GitHub Actions under Python 3.10 + NEURON 8.2.2.
 
-For the stripped two-state order contrast, an order-sensitive source-to-receiver term at graph distance `r` heuristically needs
+Execution/provenance is frozen in:
 
 ```text
-r cable moves + one state-difference insertion
+PARK_P0_EXECUTION_RECEIPT.md
 ```
 
-and therefore first appears around `t^(r+1)`.
+Main successful runs:
 
-**Do not call this a light cone.** Compartment graph distance is discretization dependent and the continuum passive cable remains diffusive. The useful statement is only that sparse morphology imposes an algebraic hierarchy on short-time compositions.
+```text
+supplement fetch/inspect   31872229100
+phenotype reproduction    31872543670
+500-um receiver census    31872658435
+```
+
+The exact package had minor reproducibility rough edges (unused non-ASCII `cheriff.mod`, constructor/helper drift, duplicate auto-loading trap). They were handled without editing active channel equations; details are in the receipt.
 
 ---
 
-## Park 2025 = known-answer calibration organism
+## Important P0 result: receiver choice matters substantially
 
-Park et al. (Nature Communications 2025) provide a particularly clean history-dependent CA1 phenomenon:
+The paper describes distal spike classification at a compartment around 500 um from the soma. In this branched morphology that does not identify a unique receiver.
+
+A post-hoc chosen receiver is unacceptable, so the audit recorded **every non-axonal segment from 450–550 um**.
+
+### Released run 3 — soma step
+
+Five somatic spikes.
+
+At 490–510 um (`n=13`):
 
 ```text
-A-type Kv inactivation opens distal dSpike propagation
-slow NaV inactivation closes it
+FFFFF   5
+SSSSS   7
+SSSSF   1
 ```
 
-Their detailed NEURON model reproduces failure -> dSpike -> dSpike -> failure and period-doubling. In the pure-optogenetic model, VGCC and NMDAR conductances are intentionally omitted, making this a clean active-channel history calibration before NMDA.
+At 450–550 um (`n=62`):
 
-The Methods say the detailed model adapts ModelDB 116084 (Jarsky et al. 2005) and adds slow NaV inactivation plus changed spatial NaV/A-type Kv distributions. The Fig. 4 caption instead labels the morphology ModelDB 64167. These are related CA1 model lineages, but the article is internally inconsistent on the accession label. Do not guess; inspect Supplementary Software 1.
+```text
+FFFFF   22
+SSSSS   33
+FSSFF    4
+SSSSF    3
+```
 
-Supplementary Software 1 is publicly listed by the paper. Binary retrieval from the current tool session has failed, and the GitHub mirror of ModelDB 116084 stores its baseline as a binary legacy ZIP. **Park has not yet been run here.**
+So the exact released model **does contain the qualitative failure -> success -> success -> failure motif**, but only on a subset of branches in the broad ~500-um shell under this released run.
+
+Do **not** select one of those FSSFF branches after seeing the outcome and call it the canonical paper receiver.
+
+### Released run 12 — widefield step
+
+Thirteen somatic spikes.
+
+At 490–510 um the exact initial prefix varies, but every recorded branch enters a strong alternating success/failure regime. Across 450–550 um, the two largest classes were:
+
+```text
+SSSFSFSFSFSFS   31 / 62
+SFSFSFSFSFSFS   13 / 62
+```
+
+The **period-doubled / alternating propagation regime is therefore a cleaner receiver-robust known-answer calibration** than the exact initial FSS prefix.
+
+This is a methodological result about how to run the next gate, not a discovery claim.
 
 ---
 
-## Cheap gate before a full Jacobian
+## Predeclared follow-up found in the authors' own stored scan
 
-Official NEURON `Impedance.compute(freq,1)` performs an extended linearization at the current model state, including supported differential gating-state contributions.
-
-Once the Park code is runnable:
+The released file
 
 ```text
-P0 reproduce the published phenotype exactly
-
-I0 save snapshots:
-   first bAP failure
-   opening of dSpike window
-   successful dSpike regime
-   closing of window
-   late failure
-
-I1 extended transfer impedance vs frequency:
-   soma -> distal
-   soma -> soma
-   selected dendrite -> soma
-   selected dendrite -> distal
-
-I2 freeze A-type Kv history; repeat
-I3 freeze slow NaV history; repeat
-
-I4 compare:
-   voltage-only edge null
-   full extended gating-state impedance
+Model Robustness/Figures/Figure_S19c-e/Plot_Phase_Diagrams.m
 ```
 
-If known history dependence creates no meaningful source->receiver operator change, stop before giant Jacobians.
+contains the authors' stored parameter-scan outcomes.
 
-If it survives, then obtain short-window `A(t)`, direct `Phi`, `Omega_1`, `Omega_2`, and split `Omega_2^geom` from `Omega_2^local`.
+Before running any V23 follow-up, one table point was predeclared because the authors already label it `FSSFFF`:
+
+```text
+NaV soma        0.05 S/cm2
+NaV dendrite    0.048 S/cm2
+stimmax         7e-4
+Nav_inactivation [1, 0.5, 300, 100]
+Kad             [-0.2, 0.3, 0, 150]
+expected stored table code 011000 = FSSFFF
+```
+
+This is not parameter tuning by V23; it is a reproduction of a pre-existing published-supplement table coordinate.
+
+That run is next.
 
 ---
 
-## Stronger falsifier introduced by the full-state split
+# NEXT EXECUTION — NO NEW THEORY FIRST
 
-The central question is no longer merely
+## P0b — reproduce the predeclared stored FSSFFF parameter point
+
+Run the authors' stored scan coordinate above and again census a fixed receiver shell rather than selecting a favorable branch.
+
+Purpose:
 
 ```text
-is chronology present?
+- verify the stored phase-diagram receipt against the released executable model
+- obtain a cleaner opening/closing trajectory if possible
+- determine how much of FSSFFF is branch-specific
 ```
 
-but
+## I0 — state-conditioned transfer gate
+
+The first chronology instrument is **not** the giant Jacobian.
+
+Use NEURON's extended state-dependent impedance calculation on the already running detailed model.
+
+Freeze receiver policy before seeing impedance:
 
 ```text
-is the chronology morphology-dependent?
+A. soma
+B. authors-helper longest-path receiver near 500 um
+C. fixed 490–510 um receiver ensemble
 ```
 
-A clean failure would be:
+Use matched inter-spike states away from the spike singularity, comparing states preceding distal success versus failure.
+
+Measure source->receiver transfer over a modest frequency grid, separating gain, phase/delay, and normalized shape.
+
+If the known history-dependent phenotype produces essentially no meaningful state-conditioned transfer change, stop before building a giant `A(t)`.
+
+## I1 — causal channel-history controls
+
+Only if I0 survives:
 
 ```text
-Park phenotype present
+slow NaV history control
+A-type Kv control
+```
+
+Use interventions grounded in the released mechanisms / Park experiments and verify that the operating regime remains interpretable. Do not repeat the older mistake of calling a dead intervention a mechanism test.
+
+## I2 — chronology decomposition
+
+Only after P0/I0/I1:
+
+```text
+short-window A(t)
+direct Phi
+Omega_1
+Omega_2
+Omega_2^geom vs Omega_2^local
+physical B/C source-receiver projections
+```
+
+Primary kill condition:
+
+```text
+known history phenotype present
 chronological sensitivity present
 Omega_2^local large
-Omega_2^geom negligible at the distal receiver
+receiver-visible Omega_2^geom negligible
 ```
 
-Then the neuron is stateful, but V23 has not earned a geometry × history mechanism.
-
-A more interesting result would require all of:
-
-```text
-known history gates -> geometry/history term changes
-geometry/history term -> receiver-visible transfer changes
-address/path-matched shuffles -> destroy or alter the term
-same total conductance/activity -> cannot explain result
-finite-amplitude phenotype -> covaries causally
-```
+=> neuron is stateful, but the GeometricNeuron morphology × history mechanism loses here.
 
 ---
 
-## 2026 experimental constraints / motivation
+# JOINT OPTIMIZATION BRANCH — DEFERRED AND NARROWED
 
-Wong-Campos, Park et al. (Nature Neuroscience 2026) report broadly correlated membrane voltage across L2/3 cortical dendritic arbors, with only weak branch-level electrical compartmentalization, while distal bAP propagation remains strongly history-dependent.
+Gemini's suggested later discovery harness is directionally sensible, but a new prior-art collision narrows it.
 
-So avoid a story requiring thousands of electrically independent mini-computers. A more defensible target is **history-conditioned accessibility/routing of relatively shared electrical events**.
+Torben-Nielsen & Stiefel (2009), *Systematic mapping between dendritic function and structure*, already used a genetic algorithm to optimize realistic dendritic morphology / channel distributions for temporal input-order detection.
 
-Maristany de Las Casas et al. (Science 2026) provide a separate behavioral anchor: suppressing apical tuft dendritic calcium signaling in ALM impaired relearning in a rule-switching task without abolishing already learned behavior, and excitatory tuft inputs showed rule-dependent clustering. This does not support the commutator metric specifically, but it strengthens the reason to ask how spatially organized dendritic state participates in flexible computation.
+Therefore V23 cannot claim as new:
+
+```text
+optimize morphology or spatial ion-channel allocation for a sequence task
+```
+
+The still-unclosed candidate seam is narrower:
+
+```text
+fixed realistic morphology
+    x trainable synaptic address
+    x trainable full presynaptic STP dynamics (U, tau_D, tau_F)
+```
+
+with strict learned-parameter-multiset shuffles and transfer-kernel analysis.
+
+Before building that harness, collide this exact seam harder with literature. Do not spend 500 optimizer restarts on a novelty premise that has not survived search.
+
+The earlier passive rearrangement lemma remains a **linear null**, not a lead: morphology-induced passive delays are small relative to ordinary STP time constants, so a large learned address effect would need to beat that trivial explanation.
 
 ---
 
-## Modes are now explanatory, not primitive
+## Current reality constraints
 
-If the mechanism survives, selected states can still be described by
-
-```text
-lambda_n(t)  pole drift
-v_n(t)       mode rotation
-R_n(t)       source/receiver residue or accessibility
-```
-
-but do not begin by clustering modes.
-
-Current primitive chain:
-
-```text
-local history
- -> changing local dynamical blocks Q_i(t)
- -> local chronology + morphology/history chronology
- -> propagation through sparse morphology
- -> receiver-visible consequence
- -> finite-amplitude behavior/task consequence
-```
-
-The strongest effect may be changing accessibility/residue with modest eigenvalue movement.
-
----
-
-## Only after Park: TwinProp / Aizenbud
-
-TwinProp already reports harder tasks with richer dendritic voltage activity and stronger NMDA recruitment. V23 must not rename their voltage-PCA observation.
-
-Later question:
-
-> **Does receiver-visible morphology × history chronology add predictive information beyond NMDA current, voltage PCA rank, voltage variance, recruited-compartment count, synapse count and firing rate?**
-
-If no, kill the computational bridge.
+- Park 2025 gives a known active-channel history mechanism suitable for calibration.
+- Wong-Campos/Park et al. 2026 argue against a story requiring thousands of electrically independent branch mini-computers; dendritic voltage is broadly correlated while propagation remains history dependent.
+- TwinProp already reports richer dendritic voltage activity / NMDA recruitment with harder optimized tasks; V23 must add mechanism, not rename PCA rank.
+- Poleg-Polsky 2026 remains the methodological model if/when we reach discovery search: constrained biology, many solutions, clustering, literature collision, then ablation.
 
 ---
 
 ## Current kill question
 
-> **In a known history-dependent dendritic computation, does the receiver-visible chronology contain a specifically morphology × changing-local-state component, rather than merely local channel-state chronology, and does that component survive controls for total activity, ordinary channel gradients, and static impedance?**
+> **In an actually reproduced history-dependent dendritic phenomenon, does the receiver-visible chronology contain a specifically morphology × changing-local-state component, rather than merely local channel-state chronology, and does that component survive predeclared receiver controls?**
 
-If Park says no, stop this branch before TwinProp.
+The next commit should answer with data, not another derivation.
