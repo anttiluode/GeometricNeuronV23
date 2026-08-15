@@ -16,6 +16,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install analysis dependency
+        run: python -m pip install numpy
 
       - name: Download frozen I1 artifact
         env:
@@ -31,7 +36,7 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
-          import json, math
+          import json
           from pathlib import Path
           import numpy as np
 
@@ -43,7 +48,6 @@ jobs:
               if len(a)<3 or np.std(a)==0 or np.std(b)==0: return float('nan')
               return float(np.corrcoef(a,b)[0,1])
 
-          # Keyed receiver state ratios at 1 Hz.
           rr={}
           for r in x['receiver_ratios']:
               if float(r['freq_Hz']) != 1.0: continue
@@ -51,9 +55,6 @@ jobs:
               rr.setdefault(key,{})['extended' if r['extended'] else 'basic']=float(r['normalized_success_over_failure'])
               rr[key]['distance_um']=float(r['distance_um'])
 
-          # Mean 1-Hz transfer magnitude at each receiver across all non-error
-          # snapshots, separately basic/extended. This is a static-position
-          # visibility proxy, not a causal variable.
           mean_amp={}
           for full in (False,True):
               vals={k:[] for k in rr}
@@ -68,55 +69,52 @@ jobs:
           rows=[]
           for key,d in rr.items():
               if 'basic' not in d or 'extended' not in d: continue
-              row=dict(section=key[0],x=key[1],distance_um=d['distance_um'],
-                       basic_ratio=d['basic'],extended_ratio=d['extended'],
-                       gating_excess_ratio=d['extended']/d['basic'],
-                       mean_basic_norm_amp=mean_amp[key]['basic'],mean_extended_norm_amp=mean_amp[key]['extended'])
-              rows.append(row)
+              rows.append(dict(section=key[0],x=key[1],distance_um=d['distance_um'],
+                               basic_ratio=d['basic'],extended_ratio=d['extended'],
+                               gating_excess_ratio=d['extended']/d['basic'],
+                               mean_basic_norm_amp=mean_amp[key]['basic'],mean_extended_norm_amp=mean_amp[key]['extended']))
           rows.sort(key=lambda r:(r['section'],r['x']))
 
           lb=np.log([r['basic_ratio'] for r in rows]); le=np.log([r['extended_ratio'] for r in rows])
           lx=np.log([r['gating_excess_ratio'] for r in rows]); dist=[r['distance_um'] for r in rows]
           ba=np.log([r['mean_basic_norm_amp'] for r in rows]); ea=np.log([r['mean_extended_norm_amp'] for r in rows])
 
-          print('HET_N',len(rows))
-          print('CORR_log_extended_vs_log_basic_ratio',corr(le,lb))
-          print('CORR_log_gating_excess_vs_log_basic_ratio',corr(lx,lb))
-          print('CORR_log_gating_excess_vs_distance',corr(lx,dist))
-          print('CORR_log_gating_excess_vs_log_mean_basic_visibility',corr(lx,ba))
-          print('CORR_log_gating_excess_vs_log_mean_extended_visibility',corr(lx,ea))
-          print('GATING_EXCESS_RANGE',float(np.min(np.exp(lx))),float(np.median(np.exp(lx))),float(np.max(np.exp(lx))),float(np.std(lx)))
-          for r in rows: print('HET_RECEIVER',json.dumps(r,separators=(',',':')))
-
-          # State summaries were recorded before impedance at each event. Use
-          # the frozen I0 success/failure labels; report means, not p-values,
-          # because events are temporally coupled within one trajectory.
-          state_rows=[]
-          seen=set()
-          for m in x['measurements']:
-              if float(m['freq_Hz'])!=1.0 or not m['extended'] or m['error']: continue
-              if m['event'] in seen: continue
-              seen.add(m['event'])
-              state_rows.append(dict(event=m['event'],label=m['label'],**{
-                  'distal_v':m['state_summary']['distal']['mean_v_mV'],
-                  'distal_s_na3':m['state_summary']['distal']['mean_s_na3'],
-                  'distal_l_atype':m['state_summary']['distal']['mean_l_atype'],
-                  'prox_v':m['state_summary']['proximal']['mean_v_mV'],
-                  'prox_s_na3':m['state_summary']['proximal']['mean_s_na3'],
-                  'prox_l_atype':m['state_summary']['proximal']['mean_l_atype'],
-              }))
-          for field in ('distal_v','distal_s_na3','distal_l_atype','prox_v','prox_s_na3','prox_l_atype'):
-              s=[r[field] for r in state_rows if r['label']=='success' and r[field] is not None]
-              f=[r[field] for r in state_rows if r['label']=='failure' and r[field] is not None]
-              print('STATE_SUCCESS_FAILURE',field,'n',len(s),len(f),'mean_success',float(np.mean(s)) if s else None,'mean_failure',float(np.mean(f)) if f else None,'delta',float(np.mean(s)-np.mean(f)) if s and f else None)
-          for r in state_rows: print('STATE_EVENT',json.dumps(r,separators=(',',':')))
-
-          out=dict(rows=rows,state_rows=state_rows,correlations={
+          cs={
               'log_extended_vs_log_basic_ratio':corr(le,lb),
               'log_gating_excess_vs_log_basic_ratio':corr(lx,lb),
               'log_gating_excess_vs_distance':corr(lx,dist),
               'log_gating_excess_vs_log_mean_basic_visibility':corr(lx,ba),
-              'log_gating_excess_vs_log_mean_extended_visibility':corr(lx,ea)},
+              'log_gating_excess_vs_log_mean_extended_visibility':corr(lx,ea),
+          }
+          print('HET_N',len(rows))
+          for k,v in cs.items(): print('CORR',k,v)
+          print('GATING_EXCESS_RANGE',float(np.min(np.exp(lx))),float(np.median(np.exp(lx))),float(np.max(np.exp(lx))),float(np.std(lx)))
+          for r in rows: print('HET_RECEIVER',json.dumps(r,separators=(',',':')))
+
+          state_rows=[]; seen=set()
+          for m in x['measurements']:
+              if float(m['freq_Hz'])!=1.0 or not m['extended'] or m['error']: continue
+              if m['event'] in seen: continue
+              seen.add(m['event'])
+              state_rows.append(dict(event=m['event'],label=m['label'],
+                  distal_v=m['state_summary']['distal']['mean_v_mV'],
+                  distal_s_na3=m['state_summary']['distal']['mean_s_na3'],
+                  distal_l_atype=m['state_summary']['distal']['mean_l_atype'],
+                  prox_v=m['state_summary']['proximal']['mean_v_mV'],
+                  prox_s_na3=m['state_summary']['proximal']['mean_s_na3'],
+                  prox_l_atype=m['state_summary']['proximal']['mean_l_atype']))
+          state_summary={}
+          for field in ('distal_v','distal_s_na3','distal_l_atype','prox_v','prox_s_na3','prox_l_atype'):
+              s=[r[field] for r in state_rows if r['label']=='success' and r[field] is not None]
+              f=[r[field] for r in state_rows if r['label']=='failure' and r[field] is not None]
+              z=dict(n_success=len(s),n_failure=len(f),mean_success=float(np.mean(s)) if s else None,
+                     mean_failure=float(np.mean(f)) if f else None,
+                     delta=float(np.mean(s)-np.mean(f)) if s and f else None)
+              state_summary[field]=z
+              print('STATE_SUCCESS_FAILURE',field,json.dumps(z,separators=(',',':')))
+          for r in state_rows: print('STATE_EVENT',json.dumps(r,separators=(',',':')))
+
+          out=dict(rows=rows,state_rows=state_rows,state_summary=state_summary,correlations=cs,
               gating_excess=dict(min=float(np.min(np.exp(lx))),median=float(np.median(np.exp(lx))),max=float(np.max(np.exp(lx))),std_log=float(np.std(lx))))
           json.dump(out,open('/tmp/park_i1_heterogeneity_audit.json','w'),indent=2)
           PY
