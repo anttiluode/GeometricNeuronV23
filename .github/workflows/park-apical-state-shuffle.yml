@@ -1,0 +1,246 @@
+name: Park apical history-state address shuffle
+
+on:
+  push:
+    paths:
+      - '.github/workflows/park-apical-state-shuffle.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shuffle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'neuron==8.2.2' numpy scipy
+
+      - name: Fetch exact Supplementary Software 1
+        shell: bash
+        run: |
+          set -euxo pipefail
+          URL='https://media.springernature.com/original/springer-static/esm/art%3A10.1038%2Fs41467-025-55819-9/MediaObjects/41467_2025_55819_MOESM7_ESM.zip'
+          curl -fL --retry 4 --retry-all-errors "$URL" -o park_software1.zip
+          unzip -q park_software1.zip -d park_software1
+          MODEL="$PWD/park_software1/Supplementary NEURON models/Conductance-based model"
+          echo "MODEL=$MODEL" >> "$GITHUB_ENV"
+
+      - name: Compile released mechanisms
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$MODEL"
+          rm -rf modfiles x86_64
+          mkdir modfiles
+          cp 'Model Robustness/ChannelsUsed/'*.mod modfiles/
+          cp 'Model Robustness/ChannelsUnused/'*.mod modfiles/
+          cp 'Model Robustness/ChannelsUsed/'*.inc modfiles/ 2>/dev/null || true
+          cp 'Model Robustness/ChannelsUnused/'*.inc modfiles/ 2>/dev/null || true
+          rm -f modfiles/cheriff.mod
+          nrnivmodl modfiles
+
+      - name: Run predeclared path-bin state-address shuffles
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$MODEL"
+          cp 'Model Robustness/parameters_list.py' ./parameters_list.py
+          cat > /tmp/park_apical_state_shuffle.py <<'PY'
+          import json, os, sys
+          import numpy as np
+          from collections import defaultdict
+          from neuron import h
+          sys.path.insert(0, os.getcwd())
+          from FullCA1Model import FullCA1Model
+          from parameters_list import setup_parameters
+
+          # PREDECLARED GATE, motivated by the apical-only correction:
+          # preserve morphology, event state, source, receiver set, and the exact
+          # multiset of a history gate inside coarse path-distance bins. Change
+          # only which apical segment carries which gate value.
+          RUN_NR=12; DT=0.025; PRE=1.0; FREQ=1.0
+          DISTAL=(490.0,510.0); BIN_UM=50.0
+          SUCCESS=.80; FAILURE=.20
+          SEEDS=list(range(10))
+          NavIn=[1,.6,300,100]; Kdr=[.04,.04,0,1]
+          tiny=[1e-9,1e-9,550,100]; CalH=[1e-9,1e-9,300,100]
+          Somacar=[1e-9,1e-9,50,30]; Nap=[1e-9,1e-9,300,100]
+          Hcn=[1e-9,1e-9,200,100]; Km=[1e-9,1e-9,550,100]
+
+          def clean():
+              for sec in list(h.allsec()): h.delete_section(sec=sec)
+
+          def build():
+              vals=setup_parameters(RUN_NR)
+              duration,stim_start,stim_end,Chr,syn,sim,out,wave,wpatch,patch,Nav,Kad,Kap,Cal,Car=vals
+              cp=[Nav,NavIn,Kap,Kad,Kdr,Chr,tiny,CalH,Cal,Somacar,Nap,tiny,Car,tiny,tiny,Hcn,Km]
+              model=FullCA1Model(cp,'Jarsky',100)
+              secs=list(h.allsec()); soma_sec=secs[0]; soma=soma_sec(.5); h.distance(0,soma)
+              apical=[]; distal=[]
+              for sec in secs:
+                  if not sec.name().startswith('apic['): continue
+                  for seg in sec:
+                      d=float(h.distance(seg)); row=dict(sec=sec,seg=seg,section=sec.name(),x=float(seg.x),distance=d)
+                      apical.append(row)
+                      if DISTAL[0]<=d<=DISTAL[1]: distal.append(row)
+              apical.sort(key=lambda r:(r['distance'],r['section'],r['x'])); distal.sort(key=lambda r:(r['section'],r['x']))
+              h.tstop=float(duration); h.dt=DT; h.celsius=35
+              tt=np.arange(0,h.tstop+h.dt,h.dt); wave=np.asarray(wave,float); n=min(len(tt),len(wave)); tt=tt[:n]; wave=wave[:n]
+              model.prepare_simulation(tt,np.tile(wave,(len(model.all),1)))
+              return model,secs,soma_sec,soma,apical,distal,float(duration)
+
+          def soma_peaks(t,v):
+              ii=np.where((v[:-1]<0)&(v[1:]>=0))[0]+1; keep=[]
+              for i in ii:
+                  if not keep or t[i]-t[keep[-1]]>1: keep.append(int(i))
+              out=[]
+              for i in keep:
+                  lo=max(0,i-int(1/DT)); hi=min(len(t),i+int(5/DT)+1); out.append(lo+int(np.argmax(v[lo:hi])))
+              return out
+
+          # Pass 1 gives literature-correct apical finite-amplitude labels.
+          clean(); model,secs,soma_sec,soma,apical,distal,duration=build()
+          rt=h.Vector(); rt.record(h._ref_t); rs=h.Vector(); rs.record(soma._ref_v); rv=[]
+          for r in distal:
+              q=h.Vector(); q.record(r['seg']._ref_v); rv.append(q)
+          h.finitialize(-73); h.v_init=-73; h.run()
+          t=np.asarray(rt); vs=np.asarray(rs); peaks=soma_peaks(t,vs)
+          patt=[]
+          for q in rv:
+              v=np.asarray(q); p=[]
+              for sp in peaks:
+                  lo=max(0,sp-int(1/DT)); hi=min(len(t),sp+int(5/DT)+1); p.append('S' if np.max(v[lo:hi])>-40 else 'F')
+              patt.append(''.join(p))
+          fracs=[]; labels=[]
+          for e in range(len(peaks)):
+              f=float(np.mean([p[e]=='S' for p in patt])); fracs.append(f); labels.append('success' if f>=SUCCESS else 'failure' if f<=FAILURE else 'mixed')
+          event_times=[float(t[p]) for p in peaks]
+          print('SHUFFLE_LABELS',list(zip(range(1,len(peaks)+1),fracs,labels)))
+          assert all(x!='mixed' for x in labels), 'apical correction expected no mixed states'
+
+          # Pass 2: deterministic trajectory, perturb only gate addresses at each
+          # frozen snapshot; no fadvance occurs while shuffled states are installed.
+          clean(); model,secs,soma_sec,soma,apical,distal,duration=build()
+          h.finitialize(-73); h.v_init=-73
+          imp=h.Impedance(); imp.loc(soma.x,sec=soma_sec)
+
+          # Stable segment indexes and path bins.
+          s_idx=[i for i,r in enumerate(apical) if hasattr(r['seg'],'s_na3')]
+          l_idx=[]
+          l_kind={}
+          for i,r in enumerate(apical):
+              if hasattr(r['seg'],'l_kad'): l_idx.append(i); l_kind[i]='kad'
+              elif hasattr(r['seg'],'l_kap'): l_idx.append(i); l_kind[i]='kap'
+
+          def groups(indices, kind=None):
+              z=defaultdict(list)
+              for i in indices:
+                  b=int(np.floor(apical[i]['distance']/BIN_UM))
+                  key=(kind[i] if kind else 'all',b)
+                  z[key].append(i)
+              return [v for v in z.values() if len(v)>=2]
+
+          s_groups=groups(s_idx)
+          l_groups=groups(l_idx,l_kind)
+          print('STATE_SHUFFLE_COUNTS',dict(apical=len(apical),distal=len(distal),s_segments=len(s_idx),l_segments=len(l_idx),s_groups=len(s_groups),l_groups=len(l_groups)))
+
+          def read_state():
+              s={i:float(apical[i]['seg'].s_na3) for i in s_idx}
+              l={}
+              for i in l_idx:
+                  seg=apical[i]['seg']; l[i]=float(seg.l_kad if l_kind[i]=='kad' else seg.l_kap)
+              return s,l
+
+          def restore(s,l):
+              for i,v in s.items(): apical[i]['seg'].s_na3=v
+              for i,v in l.items():
+                  if l_kind[i]=='kad': apical[i]['seg'].l_kad=v
+                  else: apical[i]['seg'].l_kap=v
+
+          def permutation(groups,seed,offset=0):
+              rng=np.random.default_rng(seed+offset); mp={}
+              for g in groups:
+                  src=np.array(g,int); dst=rng.permutation(src)
+                  for a,b in zip(src,dst): mp[int(a)]=int(b)
+              return mp
+
+          def apply_shuffle(base_s,base_l,which,seed):
+              restore(base_s,base_l)
+              if which in ('slowNa','joint'):
+                  mp=permutation(s_groups,seed,1000)
+                  old=base_s.copy()
+                  for dest,src in mp.items(): apical[dest]['seg'].s_na3=old[src]
+              if which in ('Atype','joint'):
+                  mp=permutation(l_groups,seed,2000)
+                  old=base_l.copy()
+                  for dest,src in mp.items():
+                      seg=apical[dest]['seg']; val=old[src]
+                      if l_kind[dest]=='kad': seg.l_kad=val
+                      else: seg.l_kap=val
+
+          def transfer_summary():
+              imp.compute(FREQ,1)
+              zin=float(imp.input(soma.x,sec=soma_sec)); vals=[]
+              for r in distal:
+                  amp=float(imp.transfer(r['seg'].x,sec=r['sec'])); vals.append(amp/max(zin,1e-300))
+              vals=np.asarray(vals,float)
+              return dict(zin=zin,receiver_norm=vals.tolist(),mean_log_norm=float(np.mean(np.log(np.maximum(vals,1e-300)))),geomean_norm=float(np.exp(np.mean(np.log(np.maximum(vals,1e-300))))) )
+
+          rows=[]
+          for ei,(pt,lab,frac) in enumerate(zip(event_times,labels,fracs),1):
+              target=max(0.0,pt-PRE)
+              while h.t+.5*DT<target: h.fadvance()
+              snap=float(h.t); base_s,base_l=read_state()
+              restore(base_s,base_l); base=transfer_summary()
+              rows.append(dict(event=ei,label=lab,frac=frac,snapshot_t=snap,condition='baseline',seed=None,**base))
+              for which in ('slowNa','Atype','joint'):
+                  for seed in SEEDS:
+                      apply_shuffle(base_s,base_l,which,seed)
+                      z=transfer_summary(); rows.append(dict(event=ei,label=lab,frac=frac,snapshot_t=snap,condition=which,seed=seed,**z))
+              restore(base_s,base_l)
+
+          # Primary result: success/failure contrast in apical ensemble log transfer.
+          def contrast(rr):
+              s=[r['mean_log_norm'] for r in rr if r['label']=='success']; f=[r['mean_log_norm'] for r in rr if r['label']=='failure']
+              return float(np.exp(np.mean(s)-np.mean(f)))
+          base=[r for r in rows if r['condition']=='baseline']; base_ratio=contrast(base)
+          summaries=[dict(condition='baseline',ratio=base_ratio)]
+          for which in ('slowNa','Atype','joint'):
+              vals=[]
+              for seed in SEEDS:
+                  q=[r for r in rows if r['condition']==which and r['seed']==seed]; vals.append(contrast(q))
+              a=np.asarray(vals,float)
+              summaries.append(dict(condition=which,n=len(vals),ratios=vals,mean=float(np.mean(a)),median=float(np.median(a)),min=float(np.min(a)),max=float(np.max(a)),std=float(np.std(a)),baseline_percentile=float(np.mean(a<=base_ratio))))
+          print('STATE_SHUFFLE_BASELINE_RATIO',base_ratio)
+          for z in summaries[1:]: print('STATE_SHUFFLE_SUMMARY',json.dumps(z,separators=(',',':')))
+
+          # Secondary: magnitude of per-event perturbation caused by shuffling.
+          per_event=[]
+          for ei in range(1,len(event_times)+1):
+              b=next(r for r in base if r['event']==ei)['mean_log_norm']
+              for which in ('slowNa','Atype','joint'):
+                  q=[r['mean_log_norm'] for r in rows if r['event']==ei and r['condition']==which]
+                  per_event.append(dict(event=ei,label=labels[ei-1],condition=which,baseline_log=b,shuffle_mean_log=float(np.mean(q)),shuffle_sd_log=float(np.std(q)),baseline_minus_shuffle_mean_log=float(b-np.mean(q))))
+          out=dict(freq_Hz=FREQ,bin_um=BIN_UM,seeds=SEEDS,receiver='apic only 490-510 um',labels=labels,fracs=fracs,event_times_ms=event_times,rows=rows,summaries=summaries,per_event=per_event)
+          json.dump(out,open('/tmp/park_apical_state_shuffle.json','w'),indent=2)
+          PY
+          python /tmp/park_apical_state_shuffle.py | tee /tmp/park_apical_state_shuffle.log
+
+      - name: Upload state-address shuffle receipt artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: park-apical-state-shuffle
+          path: |
+            /tmp/park_apical_state_shuffle.json
+            /tmp/park_apical_state_shuffle.log
+          if-no-files-found: error
+          retention-days: 14
