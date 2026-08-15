@@ -1,0 +1,47 @@
+name: Joint address x STP proof-of-concept
+
+on:
+  push:
+    paths:
+      - 'joint_address_stp_poc.py'
+      - '.github/workflows/joint-address-stp-poc.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  poc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy scipy torch --index-url https://download.pytorch.org/whl/cpu
+          python - <<'PY'
+          import torch, numpy, scipy
+          print('torch',torch.__version__,'numpy',numpy.__version__,'scipy',scipy.__version__)
+          PY
+      - name: Run predeclared POC
+        run: |
+          python joint_address_stp_poc.py \
+            --seeds 3 \
+            --shuffles 60 \
+            --train-repeats 4 \
+            --test-repeats 10 \
+            --output /tmp/joint_address_stp_poc_result.json \
+            | tee /tmp/joint_address_stp_poc.log
+      - name: Upload receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: joint-address-stp-poc
+          path: |
+            /tmp/joint_address_stp_poc_result.json
+            /tmp/joint_address_stp_poc.log
+          if-no-files-found: error
+          retention-days: 14
