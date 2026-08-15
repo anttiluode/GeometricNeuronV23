@@ -1,15 +1,15 @@
 # GeometricNeuronV23 — CURRENT HANDOFF
 
-**Updated:** 2026-08-15, sixth pass — passive address × STP closed; nonlinear gate launched; growth reframed as access geometry
+**Updated:** 2026-08-15, seventh pass — passive and synthetic nonlinear address × STP gates closed; next online gate must be biological
 
 **Status:** active falsification/discovery program. Nothing here is a novelty claim.
 
 ## Read in this order
 
-1. `JOINT_ADDRESS_STP_ORDER_POC_V02_RECEIPT.md` — strongest current passive-tree result: three-seed strict shuffle null.
-2. `GROWTH_AS_ADAPTIVE_SAMPLING_COLLISION.md` — literature collision for dendritic/spine growth as acquiring new input streams.
-3. `MORPHOLOGY_AS_ACCESS_GEOMETRY.md` — separates online transfer geometry from geometry of physically reachable synaptic partners.
-4. `joint_address_stp_nonlinear_poc.py` — current local-voltage-feedback kill gate.
+1. `JOINT_ADDRESS_STP_NONLINEAR_POC_V01_RECEIPT.md` — current result: local nonlinear feedback helps the task but exact STP→address shuffle remains null.
+2. `JOINT_ADDRESS_STP_ORDER_POC_V02_RECEIPT.md` — strongest passive-tree result: three-seed strict shuffle null.
+3. `GROWTH_AS_ADAPTIVE_SAMPLING_COLLISION.md` — literature collision for dendritic/spine growth as acquiring new input streams.
+4. `MORPHOLOGY_AS_ACCESS_GEOMETRY.md` — separates online transfer geometry from geometry of physically reachable synaptic partners.
 5. `JOINT_ADDRESS_STP_COLLISION.md` — prior-art boundary around joint address × full STP.
 6. `PARK_APICAL_STATE_SHUFFLE_RECEIPT.md`, `PARK_APICAL_I1_CORRECTION.md`, `PARK_HISTORY_CAUSAL_RECEIPT.md`, `PARK_TWO_COMPARTMENT_CONTROL_RECEIPT.md` — Park calibration / negative narrowing.
 7. `GEOMETRY_STATE_COMMUTATOR_V02.md`, `FULL_STATE_GEOMETRY_HISTORY_DECOMPOSITION.md`, `CHRONOLOGY_LOCALITY.md` — mathematical nulls, now closure tools rather than discovery priority.
@@ -22,16 +22,17 @@ Two different geometry hypotheses have now been separated.
 
 ## A. Fixed morphology as an online soma transfer machine
 
-Current evidence is mostly negative in the passive / weak-interaction regime:
+Current evidence is negative for **exact address × local temporal-state specialization** in the regimes tested so far:
 
 ```text
 passive soma transfer dictionary             nearly separable
 Park detailed history-state address          not privileged for tested metric
 passive address × learned STP                 strict shuffle null
 balanced passive address × STP, 3 seeds       strict shuffle null
+smooth local voltage feedback × STP           strict shuffle null
 ```
 
-The strongest executed passive address × STP result is:
+The strongest passive address × STP result remains:
 
 ```text
 balanced forward/reverse task
@@ -48,9 +49,20 @@ joint shuffle loss ratio      1.0000005806
 baseline/shuffled acc         1.0 / 1.0
 ```
 
-So spatial filtering and temporal synaptic state can both be useful while **not becoming mutually specialized**. The joint optimizer mostly specialized temporal dynamics by afferent identity, not by exact dendritic address.
+The new nonlinear kill-gate made the toy task much easier but did not create address binding:
 
-Do not tune the passive task or add diversity rewards to manufacture a placement effect.
+```text
+tree nonlinear, beta=2, one seed, 40 shuffles
+
+joint baseline loss           0.00087783398
+joint shuffled loss mean      0.00087751875
+joint shuffle loss ratio      0.9996408992
+baseline/shuffled acc         1.0 / 1.0
+```
+
+So spatial filtering, local nonlinear feedback and temporal synaptic state can all be useful while still **not becoming mutually specialized by exact address**.
+
+Do not tune the passive task, threshold, `beta`, or diversity rewards to manufacture a placement effect.
 
 ## B. Morphology as access/search geometry
 
@@ -112,7 +124,7 @@ x strict post-training temporal-tuple/address shuffle
 x analysis against receiver-transfer coordinates
 ```
 
-But the synthetic passive gate says **do not port this straight to a huge realistic passive cell**. Passive filtering did not create the interaction.
+But the executed synthetic gates now say **do not port the passive or smooth-threshold versions straight to a huge realistic cell**. Neither passive filtering nor the simple regenerative feedback produced the interaction.
 
 ---
 
@@ -134,26 +146,24 @@ Their interpretation is interaction: **NMDA synaptic nonlinearities + voltage-ga
 
 So the earned negative is narrower:
 
-> passive / nearly separable geometry does not create strong address × temporal-state binding in our tests.
+> passive / nearly separable geometry and a simple smooth local-voltage feedback do not create strong exact address × temporal-state binding in our tests.
 
-The active interacting-nonlinearity regime remains live.
+The biologically interacting regime remains live.
 
 ---
 
-# Current executable gate: local voltage-dependent feedback
+# Synthetic local-nonlinearity branch: now closed
 
-`joint_address_stp_nonlinear_poc.py` adds the smallest possible mechanism that can break passive separability without pretending to be a biological NMDA model.
+`joint_address_stp_nonlinear_poc.py` added the smallest possible mechanism that could break passive separability without pretending to be a biological NMDA model.
 
-For every candidate site it computes:
+For every candidate site it computed:
 
 ```text
 source -> same-site local voltage kernel
 source -> soma transfer kernel
 ```
 
-Source-to-soma kernels remain area-normalized. Local kernels preserve relative input-impedance differences (one global scaling only).
-
-The model then applies:
+and then:
 
 ```text
 STP release
@@ -162,39 +172,67 @@ STP release
  -> propagation from that same site to soma
 ```
 
-Threshold is calibrated **before training** from the median candidate-site response to a canonical homogeneous fixed-STP burst. It is not fitted to the task or shuffle effect.
+The threshold was calibrated before training from a canonical homogeneous fixed-STP burst.
 
-Matched arms:
-
-```text
-tree_linear                 beta=0
-
-tree_nonlinear              beta=2
-
-isopotential_nonlinear      beta=2
-```
-
-Same variants and strict within-afferent `(U,tau_D,tau_F)` tuple shuffle as the passive test. No forced location diversity.
-
-GitHub Actions run launched:
+GitHub Actions run:
 
 ```text
 31883664252
 ```
 
-At the time of this handoff it is still executing. Do not infer an outcome until the receipt exists.
-
-Kill logic:
+completed successfully. The decisive nonlinear-tree result was:
 
 ```text
-nonlinear tree shuffle ~= 1
-    -> simple threshold feedback is insufficient; do not tune it to win
-    -> next biological gate should use interacting NMDA + active dendritic conductance
-
-nonlinear tree shuffle departs materially from 1
-AND isopotential remains invariant
-    -> replicate across seeds and threshold/beta ranges before interpretation
+baseline joint loss        0.00087783398
+shuffle mean loss          0.00087751875
+shuffle loss ratio         0.9996408992
+baseline/shuffle acc       1.0 / 1.0
 ```
+
+The matched isopotential nonlinear control was exactly shuffle-invariant (`0.9999998597`).
+
+Verdict:
+
+> **LOCAL-SMOOTH-THRESHOLD NO ADDRESS×STP ADVANTAGE.**
+
+This branch obeys its preregistered stop condition. Do not sweep `beta` or threshold looking for a win.
+
+---
+
+# Next online-computation gate: biological interaction, not more toy tuning
+
+If the address × local-history idea is going to survive as an online dendritic computation, the next test should include the interaction class that current realistic-neuron work says matters:
+
+```text
+NMDA voltage dependence
++
+active dendritic conductance / branch event
++
+real morphology
++
+local history-bearing synaptic state
+```
+
+The important control remains unchanged:
+
+```text
+same morphology
+same afferents
+same learned/fixed STP multiset
+same total parameter/state budget
+same task
+
+STRUCTURED: temporal tuples at their trained/assigned addresses
+SHUFFLED:   the exact tuples reassigned among matched addresses
+```
+
+Before implementing this, collide the exact mechanism against primary literature and identify the smallest public model in which the NMDA × active-conductance interaction is already validated. Prefer an existing author model over hand-writing another pseudo-biological threshold.
+
+The useful question is no longer “can nonlinearity help?” It plainly can. It is:
+
+> **Does a biologically grounded state-dependent dendritic event make the identity of a local temporal synaptic state inseparable from the electrical address at which it lives?**
+
+If the answer is again no, stop pushing this online-address-binding branch and move more attention to receiver multiplicity and access/growth geometry.
 
 ---
 
@@ -258,7 +296,7 @@ Today's electrical nulls bear mainly on transfer geometry. They do **not** show 
 
 Starburst amacrine biology strongly supports receiver-relative local computation: branch calcium/output can be direction selective even when somatic voltage is not.
 
-But do not claim ANN units universally have one scalar output. Multi-output dendritic artificial neurons already exist (e.g. Ding et al., Knowledge-Based Systems 2024), as do vector-valued units and many multi-branch/multi-head architectures.
+But do not claim ANN units universally have one scalar output. Multi-output dendritic artificial neurons already exist, as do vector-valued units and many multi-branch/multi-head architectures.
 
 A narrower future test could hold total state and parameter budget fixed and compare:
 
@@ -277,24 +315,25 @@ This exact intersection needs prior-art collision before execution.
 # Current decision tree
 
 ```text
-1. Wait only for the already-running local-nonlinearity gate result.
+1. Synthetic threshold gate is CLOSED NULL.
+   Do not tune it.
 
-2a. If null:
-      stop synthetic threshold tuning.
-      move to a biologically grounded NMDA + active-conductance interaction.
+2. Online address-binding branch:
+      literature-collide and, only if warranted, run the smallest public
+      real-morphology model containing NMDA voltage dependence + active
+      dendritic conductance/branch events + local temporal synaptic state.
 
-2b. If positive with controls:
-      replicate across seeds and predeclared threshold/beta range.
-      only then port to a realistic neuron.
+3. If that biological interaction also gives strict shuffle ~= 1:
+      stop escalating address × STP as the main discovery bet.
 
-3. Keep growth as a separate structural-sampling branch:
+4. In parallel, keep growth/access geometry separate:
       morphology may matter by changing what the neuron can connect to,
       not because passive soma transfer is rich.
 
-4. Before building a growth+multi-receiver architecture, collide the exact
+5. Before building a growth+multi-receiver architecture, collide the exact
    intersection against structural-plasticity and multi-output-neuron literature.
 ```
 
 ## Current one-line state
 
-> **The passive tree did not bind temporal synapse state to address. The next online-computation gate is local voltage feedback; separately, the growth idea has reopened geometry in a different role — as the physical search space over which new input streams can be acquired.**
+> **Passive filtering and a smooth local regenerative nonlinearity both failed to bind learned temporal synapse state to exact dendritic address. The next online gate must be a real NMDA × active-dendrite interaction; separately, morphology remains live as access/search geometry and receiver-relative computation.**
