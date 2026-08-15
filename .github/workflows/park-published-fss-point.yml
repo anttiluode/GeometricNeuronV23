@@ -1,0 +1,168 @@
+name: Park published FSSFFF scan point
+
+on:
+  push:
+    paths:
+      - '.github/workflows/park-published-fss-point.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fss-point:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install released environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'neuron==8.2.2' numpy scipy matplotlib
+
+      - name: Fetch Supplementary Software 1
+        shell: bash
+        run: |
+          set -euxo pipefail
+          URL='https://media.springernature.com/original/springer-static/esm/art%3A10.1038%2Fs41467-025-55819-9/MediaObjects/41467_2025_55819_MOESM7_ESM.zip'
+          curl -fL --retry 4 --retry-all-errors "$URL" -o park_software1.zip
+          unzip -q park_software1.zip -d park_software1
+          MODEL="$PWD/park_software1/Supplementary NEURON models/Conductance-based model"
+          echo "MODEL=$MODEL" >> "$GITHUB_ENV"
+
+      - name: Compile released mechanisms
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$MODEL"
+          rm -rf modfiles x86_64
+          mkdir modfiles
+          cp 'Model Robustness/ChannelsUsed/'*.mod modfiles/
+          cp 'Model Robustness/ChannelsUnused/'*.mod modfiles/
+          cp 'Model Robustness/ChannelsUsed/'*.inc modfiles/ 2>/dev/null || true
+          cp 'Model Robustness/ChannelsUnused/'*.inc modfiles/ 2>/dev/null || true
+          rm -f modfiles/cheriff.mod
+          nrnivmodl modfiles
+
+      - name: Run predeclared stored phase-diagram point and census receivers
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$MODEL"
+          cat > /tmp/park_fss_point.py <<'PY'
+          import json, os, sys
+          import numpy as np
+          from collections import Counter
+          from neuron import h
+          sys.path.insert(0, os.getcwd())
+          from FullCA1Model import FullCA1Model
+          from run_simulation import generate_waveform
+          from run_morphology import longest_path_from_soma_sections
+
+          # PREDECLARED FROM THE AUTHORS' STORED TABLE BEFORE THIS RUN:
+          # Model Robustness/Figures/Figure_S19c-e/Plot_Phase_Diagrams.m
+          # Nav soma=0.05, Nav dendrite=0.048, stimmax=7e-4,
+          # Nav_inactivation=[1,0.5,300,100], Kad=[-0.2,0.3,0,150].
+          # Stored table code at that coordinate: 011000 = FSSFFF.
+          dt=0.025
+          duration=600/6
+          stim_start=50/10
+          stim_end=duration-50/10
+          stimmax=7e-4
+          sim_params=[duration,dt,10,190,9,0]
+          waveform=generate_waveform(sim_params,stimmax,stim_start,stim_end,'step')
+          Chr_params=[[1,0,40,10,stim_start,stim_end,0,0]]
+          Nav=[0.05,0.048,300,100]
+          Nav_inact=[1,0.5,300,100]
+          Kad=[-0.2,0.3,0,150]
+          Kap=[-0.2,0.3,0,150]
+          Kdr=[0.04,0.04,0,1]
+          tiny=[1e-9,1e-9,550,100]
+          CalH=[1e-9,1e-9,300,100]
+          Cal=[1e-9,1e-9,550,100]
+          Somacar=[1e-9,1e-9,50,30]
+          Nap=[1e-9,1e-9,300,100]
+          Car=[1e-9,1e-9,300,100]
+          Hcn=[1e-9,1e-9,200,100]
+          Km=[1e-9,1e-9,550,100]
+          cp=[Nav,Nav_inact,Kap,Kad,Kdr,Chr_params,tiny,CalH,Cal,Somacar,Nap,tiny,Car,tiny,tiny,Hcn,Km]
+
+          model=FullCA1Model(cp,'Jarsky',100)
+          secs=list(h.allsec()); soma=secs[0](0.5)
+          h.distance(0,soma)
+          names=[s.name() for s in secs]
+          distmat=np.array([[h.distance(a(0.5),b(0.5)) for b in secs] for a in secs])
+          longpath=set(longest_path_from_soma_sections(distmat,names))
+          AX=('inode','node','axon','hill','iseg')
+          cand=[]
+          for si,sec in enumerate(secs):
+              if any(x in sec.name().lower() for x in AX): continue
+              for seg in sec:
+                  d=float(h.distance(seg))
+                  if 450 <= d <= 550:
+                      cand.append((si,sec,seg,d,si in longpath))
+
+          rec_t=h.Vector(); rec_t.record(h._ref_t)
+          rec_soma=h.Vector(); rec_soma.record(soma._ref_v)
+          rec=[]
+          for _,_,seg,_,_ in cand:
+              q=h.Vector(); q.record(seg._ref_v); rec.append(q)
+
+          h.tstop=float(duration); h.dt=dt; h.celsius=35
+          times=np.arange(0,h.tstop+h.dt,h.dt)
+          wave=np.asarray(waveform,float); n=min(len(times),len(wave)); times=times[:n]; wave=wave[:n]
+          model.prepare_simulation(times,np.tile(wave,(len(model.all),1)))
+          # Stored scan has zero patch clamp.
+          model.add_patch(0,np.zeros_like(wave),'i')
+          h.finitialize(-73); h.v_init=-73; h.run()
+
+          t=np.asarray(rec_t); vs=np.asarray(rec_soma)
+          idx=np.where((vs[:-1]<0)&(vs[1:]>=0))[0]+1
+          spikes=[]
+          for i in idx:
+              if not spikes or t[i]-t[spikes[-1]]>1: spikes.append(int(i))
+          peaks=[]
+          for i in spikes:
+              lo=max(0,i-int(1/dt)); hi=min(len(t),i+int(5/dt)+1)
+              peaks.append(lo+int(np.argmax(vs[lo:hi])))
+
+          rows=[]
+          for meta,vec in zip(cand,rec):
+              si,sec,seg,d,onpath=meta; v=np.asarray(vec); vals=[]
+              for sp in peaks:
+                  lo=max(0,sp-int(1/dt)); hi=min(len(t),sp+int(5/dt)+1)
+                  vals.append(float(np.max(v[lo:hi])))
+              patt=''.join('S' if x>-40 else 'F' for x in vals)
+              rows.append(dict(section=sec.name(),x=float(seg.x),distance_um=d,on_authors_longpath=bool(onpath),pattern=patt,peaks_mV=vals))
+
+          summaries={}
+          for lo,hi in [(490,510),(480,520),(450,550)]:
+              rr=[r for r in rows if lo<=r['distance_um']<=hi]
+              summaries[f'{lo}-{hi}']={
+                  'n':len(rr),
+                  'patterns':dict(Counter(r['pattern'] for r in rr)),
+                  'longpath_patterns':dict(Counter(r['pattern'] for r in rr if r['on_authors_longpath']))
+              }
+          expected=[r for r in rows if r['pattern']=='FSSFFF']
+          out=dict(
+              predeclared=dict(Nav_soma=0.05,Nav_dendrite=0.048,stimmax=7e-4,Nav_inactivation=[1,0.5,300,100],Kad=[-0.2,0.3,0,150],stored_code='011000',stored_label='FSSFFF'),
+              n_soma_spikes=len(peaks),soma_spike_times_ms=[float(t[i]) for i in peaks],
+              summaries=summaries,n_FSSFFF=len(expected),FSSFFF_receivers=expected,rows=rows)
+          print('PUBLISHED_FSS_POINT',json.dumps({k:v for k,v in out.items() if k!='rows'},separators=(',',':')))
+          with open('/tmp/park_published_fss_point.json','w') as f: json.dump(out,f,indent=2)
+          PY
+          python /tmp/park_fss_point.py | tee /tmp/park_published_fss_point.log
+
+      - name: Upload receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: park-published-fss-point
+          path: |
+            /tmp/park_published_fss_point.json
+            /tmp/park_published_fss_point.log
+          if-no-files-found: error
+          retention-days: 14
