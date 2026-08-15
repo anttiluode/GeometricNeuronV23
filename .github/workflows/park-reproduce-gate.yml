@@ -1,0 +1,180 @@
+name: Park 2025 phenotype reproduction gate
+
+on:
+  push:
+    paths:
+      - '.github/workflows/park-reproduce-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install NEURON 8.2 and analysis dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'neuron==8.2.2' numpy scipy matplotlib
+          python - <<'PY'
+          import neuron
+          print('NEURON', neuron.__version__)
+          PY
+
+      - name: Fetch and unpack published Supplementary Software 1
+        shell: bash
+        run: |
+          set -euxo pipefail
+          URL='https://media.springernature.com/original/springer-static/esm/art%3A10.1038%2Fs41467-025-55819-9/MediaObjects/41467_2025_55819_MOESM7_ESM.zip'
+          curl -fL --retry 4 --retry-all-errors "$URL" -o park_software1.zip
+          unzip -q park_software1.zip -d park_software1
+          MODEL="$PWD/park_software1/Supplementary NEURON models/Conductance-based model"
+          echo "MODEL=$MODEL" >> "$GITHUB_ENV"
+
+      - name: Compile the authors' NMODL mechanisms
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$MODEL"
+          rm -rf modfiles x86_64
+          mkdir modfiles
+          cp 'Model Robustness/ChannelsUsed/'*.mod modfiles/
+          cp 'Model Robustness/ChannelsUnused/'*.mod modfiles/
+          cp 'Model Robustness/ChannelsUsed/'*.inc modfiles/ 2>/dev/null || true
+          cp 'Model Robustness/ChannelsUnused/'*.inc modfiles/ 2>/dev/null || true
+          nrnivmodl modfiles
+
+      - name: Run published soma-step and widefield protocols without plotting
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$MODEL"
+          cp 'Model Robustness/parameters_list.py' ./parameters_list.py
+          cat > /tmp/park_reproduce.py <<'PY'
+          import json, os, sys
+          import numpy as np
+          os.environ.setdefault('MPLBACKEND','Agg')
+          from neuron import h
+          import neuron
+          neuron.load_mechanisms('.')
+          sys.path.insert(0, os.getcwd())
+          from FullCA1Model import FullCA1Model
+          from parameters_list import setup_parameters
+
+          dt = 0.025
+          Nav_inactivation = [1, 0.6, 300, 100]
+          Kdr_params = [0.04, 0.04, 0, 1]
+          tiny = [1e-9, 1e-9, 550, 100]
+          Nap_params = [1e-9, 1e-9, 300, 100]
+          CalH_params = [1e-9, 1e-9, 300, 100]
+          Somacar_params = [1e-9, 1e-9, 50, 30]
+          Car_params_default = [1e-9, 1e-9, 300, 100]
+          Hcn_params = [1e-9, 1e-9, 200, 100]
+          Km_params = [1e-9, 1e-9, 550, 100]
+
+          def clean():
+              for sec in list(h.allsec()):
+                  h.delete_section(sec=sec)
+
+          def crossings(t, v, threshold=0.0):
+              ii=np.where((v[:-1] < threshold) & (v[1:] >= threshold))[0]+1
+              # collapse pathological duplicate crossings <1 ms apart
+              keep=[]
+              for i in ii:
+                  if not keep or t[i]-t[keep[-1]] > 1.0:
+                      keep.append(int(i))
+              return keep
+
+          def run(run_nr):
+              clean()
+              vals=setup_parameters(run_nr)
+              duration, stim_start, stim_end, Chr_params, synapse_params, sim_params, outputs, waveform, waveform_patch, patch_params, Nav_params, Kad_params, Kap_params, Cal_params, Car_params = vals
+              channel_params=[Nav_params, Nav_inactivation, Kap_params, Kad_params, Kdr_params, Chr_params,
+                              tiny, CalH_params, Cal_params, Somacar_params, Nap_params, tiny,
+                              Car_params, tiny, tiny, Hcn_params, Km_params]
+              model=FullCA1Model(channel_params, 'Jarsky', 100)
+              secs=list(h.allsec())
+              soma=secs[0](0.5)
+              # Re-establish soma origin, then choose non-axonal segment nearest 500 um.
+              h.distance(0, soma)
+              cand=[]
+              for sec in secs:
+                  nm=sec.name().lower()
+                  if any(s in nm for s in ('axon','hill','iseg','inode','node')):
+                      continue
+                  for seg in sec:
+                      cand.append((abs(h.distance(seg)-500.0), h.distance(seg), sec, seg))
+              cand.sort(key=lambda x:x[0])
+              _, dist, dsec, distal=cand[0]
+              print('SELECTED_DISTAL', run_nr, dsec.name(), float(distal.x), float(dist))
+
+              rec_t=h.Vector(); rec_t.record(h._ref_t)
+              rec_soma=h.Vector(); rec_soma.record(soma._ref_v)
+              rec_dist=h.Vector(); rec_dist.record(distal._ref_v)
+              rec_s=h.Vector(); rec_s.record(distal._ref_s_na3)
+              # At ~500 um this should be Kad territory; record l if available.
+              rec_l=h.Vector()
+              l_name=None
+              for candidate in ('_ref_l_kad','_ref_l_kap'):
+                  if hasattr(distal,candidate):
+                      rec_l.record(getattr(distal,candidate)); l_name=candidate.replace('_ref_',''); break
+
+              h.tstop=float(duration); h.dt=dt; h.celsius=35
+              times=np.arange(0, h.tstop+h.dt, h.dt)
+              wave=np.asarray(waveform,float)
+              if len(wave)!=len(times):
+                  n=min(len(wave),len(times)); wave=wave[:n]; times=times[:n]
+              model.prepare_simulation(times, np.tile(wave,(len(model.all),1)))
+              h.finitialize(-73); h.v_init=-73; h.run()
+
+              t=np.asarray(rec_t); vs=np.asarray(rec_soma); vd=np.asarray(rec_dist)
+              sr=np.asarray(rec_s); lr=np.asarray(rec_l) if l_name else np.full_like(sr,np.nan)
+              ci=crossings(t,vs,0.0)
+              events=[]
+              for idx in ci:
+                  # locate local somatic peak and inspect distal response from 1 ms before to 5 ms after
+                  lo=max(0,idx-int(1/dt)); hi=min(len(t),idx+int(5/dt)+1)
+                  sp=lo+int(np.argmax(vs[lo:hi]))
+                  dlo=max(0,sp-int(1/dt)); dhi=min(len(t),sp+int(5/dt)+1)
+                  dp=dlo+int(np.argmax(vd[dlo:dhi]))
+                  events.append(dict(
+                      soma_t_ms=float(t[sp]), soma_peak_mV=float(vs[sp]),
+                      distal_peak_t_ms=float(t[dp]), distal_peak_mV=float(vd[dp]),
+                      dSpike=bool(vd[dp] > -40.0),
+                      Nav_reserve_s=float(sr[dp]), Atype_reserve_l=float(lr[dp]) if np.isfinite(lr[dp]) else None))
+              out=dict(run_nr=run_nr, duration_ms=float(duration), stim_start_ms=float(stim_start), stim_end_ms=float(stim_end),
+                       distal_section=dsec.name(), distal_x=float(distal.x), distal_distance_um=float(dist),
+                       l_variable=l_name, n_soma_spikes=len(events), events=events)
+              print('RESULT_JSON',json.dumps(out,separators=(',',':')))
+              np.savez_compressed(f'/tmp/park_run_{run_nr}.npz',t=t,v_soma=vs,v_distal=vd,s_na3=sr,l_atype=lr,waveform=wave)
+              return out
+
+          results=[]
+          for nr in (3,12):
+              results.append(run(nr))
+          with open('/tmp/park_reproduction.json','w') as f: json.dump(results,f,indent=2)
+          print('=== SUMMARY ===')
+          for r in results:
+              print('run',r['run_nr'],'spikes',r['n_soma_spikes'],'pattern',''.join('S' if e['dSpike'] else 'F' for e in r['events']))
+              for e in r['events']: print(e)
+          PY
+          python /tmp/park_reproduce.py | tee /tmp/park_reproduce.log
+
+      - name: Upload reproduction receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: park-phenotype-reproduction-receipt
+          path: |
+            /tmp/park_reproduction.json
+            /tmp/park_reproduce.log
+            /tmp/park_run_3.npz
+            /tmp/park_run_12.npz
+          if-no-files-found: error
+          retention-days: 14
