@@ -1,0 +1,173 @@
+name: Park 2025 500um readout census
+
+on:
+  push:
+    paths:
+      - '.github/workflows/park-readout-census.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install released environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'neuron==8.2.2' numpy scipy matplotlib
+
+      - name: Fetch Supplementary Software 1
+        shell: bash
+        run: |
+          set -euxo pipefail
+          URL='https://media.springernature.com/original/springer-static/esm/art%3A10.1038%2Fs41467-025-55819-9/MediaObjects/41467_2025_55819_MOESM7_ESM.zip'
+          curl -fL --retry 4 --retry-all-errors "$URL" -o park_software1.zip
+          unzip -q park_software1.zip -d park_software1
+          MODEL="$PWD/park_software1/Supplementary NEURON models/Conductance-based model"
+          echo "MODEL=$MODEL" >> "$GITHUB_ENV"
+
+      - name: Compile released mechanisms
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$MODEL"
+          rm -rf modfiles x86_64
+          mkdir modfiles
+          cp 'Model Robustness/ChannelsUsed/'*.mod modfiles/
+          cp 'Model Robustness/ChannelsUnused/'*.mod modfiles/
+          cp 'Model Robustness/ChannelsUsed/'*.inc modfiles/ 2>/dev/null || true
+          cp 'Model Robustness/ChannelsUnused/'*.inc modfiles/ 2>/dev/null || true
+          # Unused CheRiff mechanism has a non-ASCII bibliography character;
+          # FullCA1Model uses chr.mod and hard-codes CheRiff=False.
+          rm -f modfiles/cheriff.mod
+          nrnivmodl modfiles
+
+      - name: Census all dendritic segments around 500 um
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$MODEL"
+          cp 'Model Robustness/parameters_list.py' ./parameters_list.py
+          cat > /tmp/park_census.py <<'PY'
+          import json, os, sys
+          import numpy as np
+          from collections import Counter, defaultdict
+          from neuron import h
+          sys.path.insert(0, os.getcwd())
+          from FullCA1Model import FullCA1Model
+          from parameters_list import setup_parameters
+          from run_morphology import longest_path_from_soma_sections
+
+          dt=0.025
+          nav_inactivation=[1,0.6,300,100]  # exact released main.py default
+          kdr=[0.04,0.04,0,1]
+          tiny=[1e-9,1e-9,550,100]
+          calh=[1e-9,1e-9,300,100]
+          somacar=[1e-9,1e-9,50,30]
+          nap=[1e-9,1e-9,300,100]
+          hcn=[1e-9,1e-9,200,100]
+          km=[1e-9,1e-9,550,100]
+          AX=('inode','node','axon','hill','iseg')
+
+          def clean():
+              for sec in list(h.allsec()): h.delete_section(sec=sec)
+
+          def crossings(t,v,thr=0):
+              ii=np.where((v[:-1]<thr)&(v[1:]>=thr))[0]+1
+              out=[]
+              for i in ii:
+                  if not out or t[i]-t[out[-1]]>1: out.append(int(i))
+              return out
+
+          def run(run_nr):
+              clean()
+              vals=setup_parameters(run_nr)
+              duration,stim_start,stim_end,Chr_params,synapse_params,sim_params,outputs,waveform,waveform_patch,patch_params,Nav,Kad,Kap,Cal,Car=vals
+              cp=[Nav,nav_inactivation,Kap,Kad,kdr,Chr_params,tiny,calh,Cal,somacar,nap,tiny,Car,tiny,tiny,hcn,km]
+              model=FullCA1Model(cp,'Jarsky',100)
+              secs=list(h.allsec()); soma=secs[0](0.5)
+              h.distance(0,soma)
+
+              # Authors' helper-defined longest section path, only for annotation.
+              names=[s.name() for s in secs]
+              distmat=np.array([[h.distance(a(0.5),b(0.5)) for b in secs] for a in secs])
+              longpath=set(longest_path_from_soma_sections(distmat,names))
+
+              cand=[]
+              for si,sec in enumerate(secs):
+                  if any(x in sec.name().lower() for x in AX): continue
+                  for seg in sec:
+                      d=float(h.distance(seg))
+                      if 450 <= d <= 550:
+                          cand.append((si,sec,seg,d,si in longpath))
+              print('CANDIDATES',run_nr,len(cand))
+
+              rec_t=h.Vector(); rec_t.record(h._ref_t)
+              rec_soma=h.Vector(); rec_soma.record(soma._ref_v)
+              rec=[]
+              for _,_,seg,_,_ in cand:
+                  q=h.Vector(); q.record(seg._ref_v); rec.append(q)
+
+              h.tstop=float(duration); h.dt=dt; h.celsius=35
+              times=np.arange(0,h.tstop+h.dt,h.dt)
+              wave=np.asarray(waveform,float); n=min(len(times),len(wave)); times=times[:n]; wave=wave[:n]
+              model.prepare_simulation(times,np.tile(wave,(len(model.all),1)))
+              # Follow released run_simulation: add patch even when zero.
+              model.add_patch(patch_params[0],patch_params[1],patch_params[2])
+              h.finitialize(-73); h.v_init=-73; h.run()
+
+              t=np.asarray(rec_t); vs=np.asarray(rec_soma); spike_idx=crossings(t,vs)
+              # Soma local peaks define event anchors.
+              peaks=[]
+              for idx in spike_idx:
+                  lo=max(0,idx-int(1/dt)); hi=min(len(t),idx+int(5/dt)+1)
+                  peaks.append(lo+int(np.argmax(vs[lo:hi])))
+
+              rows=[]
+              for meta,vec in zip(cand,rec):
+                  si,sec,seg,d,onpath=meta; v=np.asarray(vec)
+                  vals=[]
+                  for sp in peaks:
+                      lo=max(0,sp-int(1/dt)); hi=min(len(t),sp+int(5/dt)+1)
+                      vals.append(float(np.max(v[lo:hi])))
+                  pattern=''.join('S' if x>-40 else 'F' for x in vals)
+                  rows.append(dict(section=sec.name(),section_index=si,x=float(seg.x),distance_um=d,
+                                   on_authors_longpath=bool(onpath),pattern=pattern,peaks_mV=vals))
+
+              # Strictly predeclared windows; report distributions, don't pick a winner.
+              summaries={}
+              for lo,hi in [(490,510),(480,520),(450,550)]:
+                  rr=[r for r in rows if lo<=r['distance_um']<=hi]
+                  summaries[f'{lo}-{hi}']={
+                      'n':len(rr),
+                      'patterns':dict(Counter(r['pattern'] for r in rr)),
+                      'longpath_patterns':dict(Counter(r['pattern'] for r in rr if r['on_authors_longpath']))
+                  }
+              nearest=sorted(rows,key=lambda r:abs(r['distance_um']-500))[:30]
+              out=dict(run_nr=run_nr,duration_ms=float(duration),stim_start_ms=float(stim_start),stim_end_ms=float(stim_end),
+                       n_soma_spikes=len(peaks),summaries=summaries,nearest_30=nearest,rows=rows)
+              print('CENSUS_SUMMARY',json.dumps({k:v for k,v in out.items() if k!='rows'},separators=(',',':')))
+              return out
+
+          results=[run(3),run(12)]
+          with open('/tmp/park_readout_census.json','w') as f: json.dump(results,f,indent=2)
+          PY
+          python /tmp/park_census.py | tee /tmp/park_readout_census.log
+
+      - name: Upload census receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: park-500um-readout-census
+          path: |
+            /tmp/park_readout_census.json
+            /tmp/park_readout_census.log
+          if-no-files-found: error
+          retention-days: 14
