@@ -1,0 +1,240 @@
+name: Park state-conditioned impedance I0
+
+on:
+  push:
+    paths:
+      - '.github/workflows/park-impedance-i0.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  i0:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'neuron==8.2.2' numpy scipy matplotlib
+
+      - name: Fetch published Supplementary Software 1
+        shell: bash
+        run: |
+          set -euxo pipefail
+          URL='https://media.springernature.com/original/springer-static/esm/art%3A10.1038%2Fs41467-025-55819-9/MediaObjects/41467_2025_55819_MOESM7_ESM.zip'
+          curl -fL --retry 4 --retry-all-errors "$URL" -o park_software1.zip
+          unzip -q park_software1.zip -d park_software1
+          MODEL="$PWD/park_software1/Supplementary NEURON models/Conductance-based model"
+          echo "MODEL=$MODEL" >> "$GITHUB_ENV"
+
+      - name: Compile released mechanisms
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$MODEL"
+          rm -rf modfiles x86_64
+          mkdir modfiles
+          cp 'Model Robustness/ChannelsUsed/'*.mod modfiles/
+          cp 'Model Robustness/ChannelsUnused/'*.mod modfiles/
+          cp 'Model Robustness/ChannelsUsed/'*.inc modfiles/ 2>/dev/null || true
+          cp 'Model Robustness/ChannelsUnused/'*.inc modfiles/ 2>/dev/null || true
+          rm -f modfiles/cheriff.mod
+          nrnivmodl modfiles
+
+      - name: Run I0 impedance gate on released widefield regime
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$MODEL"
+          cp 'Model Robustness/parameters_list.py' ./parameters_list.py
+          cat > /tmp/park_impedance_i0.py <<'PY'
+          import json, math, os, sys
+          import numpy as np
+          from collections import Counter
+          from neuron import h
+          sys.path.insert(0, os.getcwd())
+          from FullCA1Model import FullCA1Model
+          from parameters_list import setup_parameters
+          from run_morphology import longest_path_from_soma_sections
+
+          DT=0.025
+          RUN_NR=12                  # released Optopatch step widefield
+          PRE_OFFSET_MS=1.0          # fixed before looking at impedance results
+          FREQS=[1.0,10.0,50.0,100.0]
+          SHELL=(490.0,510.0)        # fixed receiver shell from P0 receipt
+          CONS_SUCCESS=0.80
+          CONS_FAILURE=0.20
+          AX=('inode','node','axon','hill','iseg')
+
+          Nav_inactivation=[1,0.6,300,100]
+          Kdr=[0.04,0.04,0,1]
+          tiny=[1e-9,1e-9,550,100]
+          CalH=[1e-9,1e-9,300,100]
+          Somacar=[1e-9,1e-9,50,30]
+          Nap=[1e-9,1e-9,300,100]
+          Hcn=[1e-9,1e-9,200,100]
+          Km=[1e-9,1e-9,550,100]
+
+          def clean():
+              for sec in list(h.allsec()): h.delete_section(sec=sec)
+
+          def build():
+              vals=setup_parameters(RUN_NR)
+              duration,stim_start,stim_end,Chr,synapses,sim_params,outputs,waveform,waveform_patch,patch_params,Nav,Kad,Kap,Cal,Car=vals
+              cp=[Nav,Nav_inactivation,Kap,Kad,Kdr,Chr,tiny,CalH,Cal,Somacar,Nap,tiny,Car,tiny,tiny,Hcn,Km]
+              model=FullCA1Model(cp,'Jarsky',100)
+              secs=list(h.allsec()); soma_sec=secs[0]; soma=soma_sec(0.5)
+              h.distance(0,soma)
+              rec=[]
+              for sec in secs:
+                  if any(x in sec.name().lower() for x in AX): continue
+                  for seg in sec:
+                      d=float(h.distance(seg))
+                      if SHELL[0] <= d <= SHELL[1]:
+                          rec.append((sec.name(),float(seg.x),d,sec,seg))
+              rec.sort(key=lambda z:(z[0],z[1]))
+              # identify helper-defined long-path receiver, for reporting only
+              names=[s.name() for s in secs]
+              distmat=np.array([[h.distance(a(0.5),b(0.5)) for b in secs] for a in secs])
+              lp=set(longest_path_from_soma_sections(distmat,names))
+              lp_candidates=[]
+              for si,sec in enumerate(secs):
+                  if si not in lp or any(x in sec.name().lower() for x in AX): continue
+                  for seg in sec:
+                      d=float(h.distance(seg)); lp_candidates.append((abs(d-500),sec.name(),float(seg.x),d))
+              lp_candidates.sort()
+              long_receiver=lp_candidates[0] if lp_candidates else None
+              h.tstop=float(duration); h.dt=DT; h.celsius=35
+              times=np.arange(0,h.tstop+h.dt,h.dt)
+              wave=np.asarray(waveform,float); n=min(len(times),len(wave)); times=times[:n]; wave=wave[:n]
+              model.prepare_simulation(times,np.tile(wave,(len(model.all),1)))
+              # patch is zero in released run12; do not instantiate gclamp so the
+              # extended impedance system remains CVode-compatible.
+              return model,secs,soma_sec,soma,rec,long_receiver,float(duration),wave
+
+          def soma_peaks(t,v):
+              idx=np.where((v[:-1]<0)&(v[1:]>=0))[0]+1
+              keep=[]
+              for i in idx:
+                  if not keep or t[i]-t[keep[-1]]>1: keep.append(int(i))
+              peaks=[]
+              for i in keep:
+                  lo=max(0,i-int(1/DT)); hi=min(len(t),i+int(5/DT)+1)
+                  peaks.append(lo+int(np.argmax(v[lo:hi])))
+              return peaks
+
+          # PASS 1: classify every event from the whole fixed 490-510 um shell.
+          clean(); model,secs,soma_sec,soma,rec,long_receiver,duration,wave=build()
+          rt=h.Vector(); rt.record(h._ref_t)
+          rs=h.Vector(); rs.record(soma._ref_v)
+          rvec=[]
+          for _,_,_,_,seg in rec:
+              q=h.Vector(); q.record(seg._ref_v); rvec.append(q)
+          h.finitialize(-73); h.v_init=-73; h.run()
+          t=np.asarray(rt); vs=np.asarray(rs); peaks=soma_peaks(t,vs)
+          shell_patterns=[]; event_fracs=[]
+          per_receiver=[]
+          for meta,q in zip(rec,rvec):
+              v=np.asarray(q); vals=[]
+              for sp in peaks:
+                  lo=max(0,sp-int(1/DT)); hi=min(len(t),sp+int(5/DT)+1)
+                  vals.append(float(np.max(v[lo:hi])))
+              patt=['S' if x>-40 else 'F' for x in vals]
+              per_receiver.append(dict(section=meta[0],x=meta[1],distance_um=meta[2],pattern=''.join(patt),peaks_mV=vals))
+          for e in range(len(peaks)):
+              frac=float(np.mean([1.0 if r['pattern'][e]=='S' else 0.0 for r in per_receiver]))
+              event_fracs.append(frac)
+              if frac>=CONS_SUCCESS: shell_patterns.append('success')
+              elif frac<=CONS_FAILURE: shell_patterns.append('failure')
+              else: shell_patterns.append('mixed')
+          event_times=[float(t[p]) for p in peaks]
+          print('I0_PASS1_EVENTS',list(zip(range(1,len(peaks)+1),event_times,event_fracs,shell_patterns)))
+
+          # PASS 2: deterministic replay; evaluate state-conditioned impedance
+          # exactly PRE_OFFSET_MS before every soma peak from pass 1.
+          clean(); model,secs,soma_sec,soma,rec2,long_receiver2,duration,wave=build()
+          recmap={(a,b):(sec,seg,d) for a,b,d,sec,seg in rec2}
+          # Require exact receiver identity between passes.
+          keys1=[(a,b) for a,b,_,_,_ in rec]
+          keys2=[(a,b) for a,b,_,_,_ in rec2]
+          assert keys1==keys2
+
+          h.finitialize(-73); h.v_init=-73
+          imp=h.Impedance()
+          imp.loc(soma.x,sec=soma_sec)
+          measurements=[]
+          for ei,(peak_t,frac,label) in enumerate(zip(event_times,event_fracs,shell_patterns),start=1):
+              target=max(0.0,peak_t-PRE_OFFSET_MS)
+              while h.t + 0.5*DT < target:
+                  h.fadvance()
+              state_t=float(h.t)
+              for freq in FREQS:
+                  for full in (0,1):
+                      recvals=[]; error=None
+                      try:
+                          imp.compute(freq,full)
+                          for key in keys1:
+                              sec,seg,d=recmap[key]
+                              recvals.append(dict(
+                                  section=key[0],x=key[1],distance_um=d,
+                                  amp_MOhm=float(imp.transfer(seg.x,sec=sec)),
+                                  phase_rad=float(imp.transfer_phase(seg.x,sec=sec))))
+                      except Exception as exc:
+                          error=repr(exc)
+                      measurements.append(dict(
+                          event=ei,peak_t_ms=peak_t,snapshot_t_ms=state_t,pre_offset_ms=PRE_OFFSET_MS,
+                          shell_success_fraction=frac,event_label=label,freq_Hz=freq,extended=bool(full),
+                          error=error,receivers=recvals))
+
+          # Summary: shell median amplitude at each event, then success-vs-failure
+          # contrasts for events that meet the predeclared 80/20 consensus rule.
+          summaries=[]
+          for full in (False,True):
+              for freq in FREQS:
+                  rows=[]
+                  for m in measurements:
+                      if m['extended']==full and m['freq_Hz']==freq and not m['error']:
+                          amps=np.array([r['amp_MOhm'] for r in m['receivers']],float)
+                          phases=np.array([r['phase_rad'] for r in m['receivers']],float)
+                          rows.append(dict(event=m['event'],label=m['event_label'],frac=m['shell_success_fraction'],
+                                           median_amp=float(np.median(amps)),mean_log_amp=float(np.mean(np.log(np.maximum(amps,1e-300)))),
+                                           circular_phase=float(np.angle(np.mean(np.exp(1j*phases))))))
+                  suc=[r for r in rows if r['label']=='success']; fail=[r for r in rows if r['label']=='failure']
+                  summary=dict(extended=full,freq_Hz=freq,n_success=len(suc),n_failure=len(fail),events=rows)
+                  if suc and fail:
+                      summary['success_minus_failure_mean_log_amp']=float(np.mean([r['mean_log_amp'] for r in suc])-np.mean([r['mean_log_amp'] for r in fail]))
+                      summary['success_over_failure_geomean_amp']=float(np.exp(summary['success_minus_failure_mean_log_amp']))
+                      summary['success_minus_failure_circular_phase_rad']=float(np.angle(np.mean(np.exp(1j*np.array([r['circular_phase'] for r in suc]))) / np.mean(np.exp(1j*np.array([r['circular_phase'] for r in fail])))))
+                  summaries.append(summary)
+
+          out=dict(
+              protocol='released run12 Optopatch step widefield',receiver_shell_um=list(SHELL),
+              receiver_count=len(rec),consensus_success=CONS_SUCCESS,consensus_failure=CONS_FAILURE,
+              pre_offset_ms=PRE_OFFSET_MS,freqs_Hz=FREQS,longpath_receiver=long_receiver,
+              event_times_ms=event_times,event_shell_success_fraction=event_fracs,event_labels=shell_patterns,
+              receiver_patterns=per_receiver,measurements=measurements,summaries=summaries)
+          print('=== I0 SUMMARY ===')
+          print('receiver_count',len(rec),'longpath_receiver',long_receiver)
+          print('event_labels',list(zip(range(1,len(peaks)+1),event_fracs,shell_patterns)))
+          for s in summaries:
+              print('IMP_SUMMARY',json.dumps({k:v for k,v in s.items() if k!='events'},separators=(',',':')))
+          with open('/tmp/park_impedance_i0.json','w') as f: json.dump(out,f,indent=2)
+          PY
+          python /tmp/park_impedance_i0.py | tee /tmp/park_impedance_i0.log
+
+      - name: Upload I0 receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: park-impedance-i0
+          path: |
+            /tmp/park_impedance_i0.json
+            /tmp/park_impedance_i0.log
+          if-no-files-found: error
+          retention-days: 14
