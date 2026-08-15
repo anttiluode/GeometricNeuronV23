@@ -1,0 +1,40 @@
+name: Joint address x STP balanced order POC
+
+on:
+  push:
+    paths:
+      - '.github/workflows/joint-address-stp-order-poc.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  balanced-order-poc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          python -m pip install numpy scipy
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Run one-seed balanced forward-reverse smoke gate
+        run: |
+          python joint_address_stp_order_poc.py \
+            --seeds 1 \
+            --shuffles 40 \
+            --train-repeats 64 \
+            --test-repeats 160 \
+            --output /tmp/joint_address_stp_order_poc_result.json \
+            | tee /tmp/joint_address_stp_order_poc.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: joint-address-stp-balanced-order-poc
+          path: |
+            /tmp/joint_address_stp_order_poc_result.json
+            /tmp/joint_address_stp_order_poc.log
+          retention-days: 14
