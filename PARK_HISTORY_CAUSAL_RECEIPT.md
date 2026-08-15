@@ -1,7 +1,7 @@
 # Park 2025 — causal history controls in the detailed model
 
 **Date:** 2026-08-15  
-**Status:** executed causal phenotype controls in the released detailed CA1 model. **Not a novelty claim.**
+**Status:** executed causal phenotype controls in the released detailed CA1 model, with a later **distal-apical-only audit** matching the primary paper. **Not a novelty claim.**
 
 ## Purpose
 
@@ -9,7 +9,7 @@ The detailed-model I0/I1 analyses showed that states preceding distal dSpike suc
 
 This run therefore intervened on the two Park mechanisms directly, before any full Jacobian/Magnus analysis.
 
-Workflow:
+Primary intervention workflow:
 
 ```text
 .github/workflows/park-history-causal-controls.yml
@@ -17,43 +17,45 @@ GitHub Actions run 31873317216
 job 94985130689
 ```
 
-Model/protocol:
+Anatomical correction / audit:
 
 ```text
-exact Supplementary Software 1
-released run 12 — Optopatch step widefield
-fixed 490–510 um receiver shell, n=13
-same >=80% success / <=20% failure consensus rule as I0/I1
+.github/workflows/park-history-causal-apical-audit.yml
+GitHub Actions run 31873584518
+job 94985782076
 ```
+
+The apical-only audit supersedes mixed apical/basal interpretations below wherever they differ.
 
 ---
 
-# Baseline
+# Literature-correct receiver definition
 
-Released parameters:
+Park et al. study history-dependent dSpikes in **distal apical dendrites**. The original V23 shell had accidentally pooled all non-axonal 490–510 um receivers, including basal `dend[]` sections.
 
-```text
-Nav slow-inactivation parameter bundle [1, 0.6, 300, 100]
-A-type Kv unchanged
-```
-
-13 somatic spikes.
-
-Shell consensus:
+The corrected causal readout therefore uses only:
 
 ```text
-S M S F S F S F S F S F M
+apic[] sections
+490–510 um path distance
+n = 8 receivers
+same >=80% success / <=20% failure ensemble rule
 ```
 
-or compactly:
+Baseline patterns:
 
 ```text
-SMSFSFSFSFSFM
+apic[53]   SSSSFFSFSFSFS
+7 others   SSSFSFSFSFSFS
 ```
 
-This reproduces the receiver-ensemble alternation used for I0/I1.
+Apical consensus:
 
-At 1 ms before the classified events, baseline distal slow-NaV state `s_na3` progressively declined, and the baseline A-type gate oscillated with the success/failure phase.
+```text
+SSSFSFSFSFSFS
+```
+
+This is the finite-amplitude phenotype to which the causal controls should be compared.
 
 ---
 
@@ -79,7 +81,7 @@ ar2 = 1
 
 makes `sinf = 1` exactly: the slow-inactivation drive is disabled without deleting the NaV current or its fast `m/h` gates.
 
-V23 therefore changed only the released slow-inactivation bundle from
+V23 changed only the released slow-inactivation bundle from
 
 ```text
 [1, 0.6, 300, 100]
@@ -91,39 +93,30 @@ to
 [1, 1, 300, 100].
 ```
 
-Result:
+The detailed model remained alive and produced the same number of somatic spikes:
 
 ```text
-13 somatic spikes
-s_na3 = 1.0 throughout the recorded shell snapshots
+13
 ```
 
-Consensus sequence:
+### Correct apical-only result
+
+All eight distal-apical receivers propagated **all 13 events**:
 
 ```text
-S M S M S M S M S M S M S
+8 / 8 receivers: SSSSSSSSSSSSS
+apical consensus: SSSSSSSSSSSSS
 ```
 
-There were **no consensus failure events** under the frozen >=80% / <=20% rule.
+So the earlier mixed-shell observation of five receivers that kept alternating was entirely explained by the inadvertently included basal receivers.
 
-Receiver-level patterns separated into two groups:
-
-```text
-SSSSSSSSSSSSS    8 / 13 receivers
-SFSFSFSFSFSFS    5 / 13 receivers
-```
+**Correction:** there is no residual alternating distal-apical subgroup after slow NaV inactivation is removed.
 
 Interpretation:
 
-> Removing slow NaV inactivation abolishes the baseline progression into shell-wide failure states, while leaving somatic spiking and an alternating subset of distal receiver behavior alive.
+> In the biologically relevant distal-apical compartment, removing slow NaV inactivation abolishes the failure/alternation phase completely while preserving repeated somatic spiking.
 
-This is a live causal intervention, not a dead arm.
-
-It supports Park's identified role for slow NaV inactivation in closing / restricting the distal propagation regime.
-
-It also exposes an important spatial fact: even with the common slow-NaV closing mechanism removed, five of thirteen receivers still alternate while eight transmit every event. That residual receiver split cannot be attributed to slow NaV inactivation alone.
-
-Do not yet interpret that split as detailed-morphology computation; static channel distribution and ordinary transfer differences remain controls.
+This is a clean live causal control and strongly supports Park's identified role for slow NaV inactivation in closing/restricting distal propagation.
 
 ---
 
@@ -133,91 +126,94 @@ This is a strong blocker-like intervention, not a subtle freeze of one gate.
 
 Both released proximal/distal A-type conductance densities were set to zero while preserving the rest of the model.
 
-Result:
+The operating regime remained excitable but somatic firing changed:
 
 ```text
 9 somatic spikes
-all 13 receivers succeed on all 9 events
-consensus = SSSSSSSSS
-receiver patterns: 13 / 13 identical SSSSSSSSS
 ```
 
-The operating regime remained excitable and produced repeated somatic spikes, although the somatic firing pattern changed substantially (13 -> 9 spikes).
+### Correct apical-only result
+
+All eight distal-apical receivers propagated every surviving event:
+
+```text
+8 / 8 receivers: SSSSSSSSS
+apical consensus: SSSSSSSSS
+```
 
 Interpretation:
 
-> Removing A-type Kv removes the failure/alternation phenotype entirely in this detailed-model protocol.
+> Removing A-type Kv removes the failure/alternation phenotype entirely in the distal-apical readout.
 
 This is directionally consistent with Park's mechanism that A-type Kv limits initial/distal propagation and its inactivation opens the dSpike window.
 
-Because firing rate and trajectory also change, this arm should not be used quantitatively as a matched `Omega_geom` intervention without a rate/trajectory control. It is a finite-amplitude causal sanity check.
+Because the somatic trajectory/firing rate changes, this arm is a finite-amplitude causal sanity check rather than a matched quantitative operator intervention.
 
 ---
 
-# What these controls earn
+# What the corrected causal controls earn
 
-The baseline success/failure alternation is causally sensitive to the identified history-bearing channel mechanisms:
+The biologically relevant distal-apical success/failure alternation is causally controlled by the identified history-bearing channel mechanisms:
 
 ```text
 slow NaV inactivation removed
-    -> shell-wide failures disappear
+    -> 13 / 13 events succeed at every distal-apical receiver
 
 A-type Kv removed
-    -> all shell receivers propagate every surviving somatic event
+    -> every surviving somatic event succeeds at every distal-apical receiver
 ```
 
-So the state-conditioned transfer difference measured in I0/I1 is not an arbitrary impedance fluctuation unrelated to the known biology.
+So the Park widefield phenotype is genuinely a channel-history phenomenon, not an arbitrary classification of impedance fluctuations.
 
 ---
 
-# What they do not earn
+# What they still do not earn
 
-They do **not** establish a detailed-morphology contribution.
+They do **not** establish that a detailed dendritic tree is necessary.
 
-The author-released two-compartment model already demonstrated that:
-
-```text
-one dendritic recovery state + one soma-dendrite coupling edge
-```
-
-is sufficient for a transient propagation window.
-
-The detailed model must therefore earn something beyond that minimal mechanism.
-
-The no-slow-NaV arm is particularly informative here: it leaves a stable split of
+The author-released two-compartment model already demonstrates that the broad transient window can be generated by:
 
 ```text
-8 receivers: always success
-5 receivers: alternating success/failure
+one soma compartment
++ one dendrite compartment
++ one coupling edge
++ one dendritic recovery/history variable
 ```
 
-under a common soma drive and with `s_na3=1` throughout.
+See `PARK_TWO_COMPARTMENT_CONTROL_RECEIPT.md`.
 
-That residual split is now a candidate **spatial-organization** target, but it still owes strong static controls before any chronology claim.
+The corrected apical-only I1 analysis also downgraded the large mixed-shell operator effect:
+
+```text
+old mixed-shell 1-Hz extended distal-specific effect  ~2.20 x
+correct apical-only effect                              ~1.11 x
+```
+
+See `PARK_APICAL_I1_CORRECTION.md`.
+
+And the direct state-address shuffle now shows that path-matched reassignment of the identified apical history fields does not destroy that modest operator contrast; A-type/joint shuffles actually increase it. See `PARK_APICAL_STATE_SHUFFLE_RECEIPT.md`.
+
+Therefore the causal controls support **local history**, not a special detailed-morphology arrangement.
 
 ---
 
-# Immediate next correction / control
+# Consequence for the GeometricNeuron branch
 
-The Park paper describes the relevant dSpikes specifically in **distal apical dendrites** and the widefield experiment illuminates the soma + apical trunk.
-
-The earlier fixed 490–510 um shell was selected by path distance alone and unintentionally included both `apic[]` and basal `dend[]` sections.
-
-This became important because the largest I1 state-ratio outliers were precisely the weakly soma-visible basal receivers.
-
-Therefore the next run is a literature-grounded correction, frozen before seeing its result:
+Park now gives a very clean separation:
 
 ```text
-repeat I1 using only apic[] receivers
-for both finite-amplitude classification and proximal/distal impedance summaries
+channel history is necessary for the distal-apical phenotype        YES
+coupling between soma and dendrite is necessary in the coarse model YES
+full detailed dendritic geometry is necessary for the phenotype      NO
+real detailed history-state address enhances our transfer metric      NO EVIDENCE
 ```
 
-This is **not** outcome tuning. It corrects the anatomical receiver definition to match the primary paper.
+This substantially weakens the case for spending immediately on a giant full-Jacobian/Magnus calculation as a discovery search.
 
-If the impressive distal-specific I1 effect collapses under the apical-only analysis, that positive must be withdrawn.
+A full `Omega_2^geom` / `Omega_2^local` decomposition may still be useful for mechanistic closure, but it would no longer be justified as the first place to look for a large hidden morphology effect in Park.
 
 ---
 
-## One-line result
+## One-line corrected result
 
-> **The Park detailed-model alternation is causally controlled by slow NaV inactivation and A-type Kv, but this still does not credit detailed morphology; the next gate corrects the receiver set to the paper's distal apical dendrites before any full chronology analysis.**
+> **On the correct distal-apical receiver set, disabling slow NaV inactivation makes all 8 receivers transmit all 13 events, and removing A-type Kv likewise abolishes failures; Park strongly validates local channel history, while detailed morphology still fails to earn necessity or a large special address effect.**
