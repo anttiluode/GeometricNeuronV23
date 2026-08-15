@@ -1,0 +1,57 @@
+name: Park 2025 supplement fetch + inspect
+
+on:
+  push:
+    paths:
+      - '.github/workflows/park-fetch-inspect.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fetch-inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch Supplementary Software 1
+        shell: bash
+        run: |
+          set -euxo pipefail
+          URL='https://media.springernature.com/original/springer-static/esm/art%3A10.1038%2Fs41467-025-55819-9/MediaObjects/41467_2025_55819_MOESM7_ESM.zip'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 20 "$URL" -o park_software1.zip
+          ls -lh park_software1.zip
+          python - <<'PY'
+          import zipfile
+          z=zipfile.ZipFile('park_software1.zip')
+          print('ZIP entries:', len(z.infolist()))
+          for x in z.infolist():
+              print(f'{x.file_size:9d}  {x.filename}')
+          PY
+
+      - name: Extract and inspect entry points
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf park_software1
+          mkdir park_software1
+          unzip -q park_software1.zip -d park_software1
+          echo '--- file tree ---'
+          find park_software1 -maxdepth 4 -type f -printf '%10s  %p\n' | sort -k2
+          echo '--- likely run/readme files ---'
+          find park_software1 -maxdepth 4 -type f \( -iname 'readme*' -o -iname '*.py' -o -iname '*.hoc' -o -iname '*.mod' -o -iname '*.sh' \) -print | sort
+          echo '--- README text only (if present) ---'
+          while IFS= read -r f; do
+            echo "===== $f ====="
+            sed -n '1,180p' "$f"
+          done < <(find park_software1 -maxdepth 4 -type f -iname 'readme*' | sort)
+
+      - name: Upload untouched supplement as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: park-2025-supplementary-software-1
+          path: park_software1.zip
+          if-no-files-found: error
+          retention-days: 7
