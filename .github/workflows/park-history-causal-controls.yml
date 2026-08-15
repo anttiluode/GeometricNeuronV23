@@ -1,0 +1,187 @@
+name: Park causal history controls
+
+on:
+  push:
+    paths:
+      - '.github/workflows/park-history-causal-controls.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  controls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'neuron==8.2.2' numpy scipy matplotlib
+
+      - name: Fetch exact Supplementary Software 1
+        shell: bash
+        run: |
+          set -euxo pipefail
+          URL='https://media.springernature.com/original/springer-static/esm/art%3A10.1038%2Fs41467-025-55819-9/MediaObjects/41467_2025_55819_MOESM7_ESM.zip'
+          curl -fL --retry 4 --retry-all-errors "$URL" -o park_software1.zip
+          unzip -q park_software1.zip -d park_software1
+          MODEL="$PWD/park_software1/Supplementary NEURON models/Conductance-based model"
+          echo "MODEL=$MODEL" >> "$GITHUB_ENV"
+
+      - name: Compile released mechanisms
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$MODEL"
+          rm -rf modfiles x86_64
+          mkdir modfiles
+          cp 'Model Robustness/ChannelsUsed/'*.mod modfiles/
+          cp 'Model Robustness/ChannelsUnused/'*.mod modfiles/
+          cp 'Model Robustness/ChannelsUsed/'*.inc modfiles/ 2>/dev/null || true
+          cp 'Model Robustness/ChannelsUnused/'*.inc modfiles/ 2>/dev/null || true
+          rm -f modfiles/cheriff.mod
+          nrnivmodl modfiles
+
+      - name: Run baseline and predeclared channel-history controls
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$MODEL"
+          cp 'Model Robustness/parameters_list.py' ./parameters_list.py
+          cat > /tmp/park_history_controls.py <<'PY'
+          import json, os, sys
+          import numpy as np
+          from collections import Counter
+          from neuron import h
+          sys.path.insert(0, os.getcwd())
+          from FullCA1Model import FullCA1Model
+          from parameters_list import setup_parameters
+
+          RUN_NR=12
+          DT=0.025
+          SHELL=(490.0,510.0)
+          AX=('inode','node','axon','hill','iseg')
+          CONS_SUCCESS=0.80; CONS_FAILURE=0.20
+
+          Kdr=[0.04,0.04,0,1]
+          tiny=[1e-9,1e-9,550,100]
+          CalH=[1e-9,1e-9,300,100]
+          Somacar=[1e-9,1e-9,50,30]
+          Nap=[1e-9,1e-9,300,100]
+          Hcn=[1e-9,1e-9,200,100]
+          Km=[1e-9,1e-9,550,100]
+
+          def clean():
+              for sec in list(h.allsec()): h.delete_section(sec=sec)
+
+          def soma_peaks(t,v):
+              idx=np.where((v[:-1]<0)&(v[1:]>=0))[0]+1
+              keep=[]
+              for i in idx:
+                  if not keep or t[i]-t[keep[-1]]>1: keep.append(int(i))
+              peaks=[]
+              for i in keep:
+                  lo=max(0,i-int(1/DT)); hi=min(len(t),i+int(5/DT)+1)
+                  peaks.append(lo+int(np.argmax(v[lo:hi])))
+              return peaks
+
+          def run(name, nav_inact_override=None, remove_atype=False):
+              clean()
+              vals=setup_parameters(RUN_NR)
+              duration,stim_start,stim_end,Chr,synapses,sim_params,outputs,waveform,waveform_patch,patch_params,Nav,Kad,Kap,Cal,Car=vals
+              Nav_inact = nav_inact_override if nav_inact_override is not None else [1,0.6,300,100]
+              if remove_atype:
+                  # Explicit A-type removal: preserve morphology and all other
+                  # channels, set both proximal/distal A-type densities to zero.
+                  Kad=[0.0,0.0,0,150]
+                  Kap=[0.0,0.0,0,150]
+              cp=[Nav,Nav_inact,Kap,Kad,Kdr,Chr,tiny,CalH,Cal,Somacar,Nap,tiny,Car,tiny,tiny,Hcn,Km]
+              model=FullCA1Model(cp,'Jarsky',100)
+              secs=list(h.allsec()); soma=secs[0](0.5)
+              h.distance(0,soma)
+              shell=[]
+              for sec in secs:
+                  if any(x in sec.name().lower() for x in AX): continue
+                  for seg in sec:
+                      d=float(h.distance(seg))
+                      if SHELL[0]<=d<=SHELL[1]: shell.append((sec.name(),float(seg.x),d,seg))
+              shell.sort(key=lambda z:(z[0],z[1]))
+              rt=h.Vector(); rt.record(h._ref_t); rs=h.Vector(); rs.record(soma._ref_v)
+              rv=[]; rss=[]; rla=[]
+              for _,_,_,seg in shell:
+                  q=h.Vector(); q.record(seg._ref_v); rv.append(q)
+                  q=h.Vector(); q.record(seg._ref_s_na3); rss.append(q)
+                  q=h.Vector();
+                  if hasattr(seg,'_ref_l_kad'): q.record(seg._ref_l_kad)
+                  elif hasattr(seg,'_ref_l_kap'): q.record(seg._ref_l_kap)
+                  rla.append(q)
+              h.tstop=float(duration); h.dt=DT; h.celsius=35
+              times=np.arange(0,h.tstop+h.dt,h.dt); wave=np.asarray(waveform,float)
+              n=min(len(times),len(wave)); times=times[:n]; wave=wave[:n]
+              model.prepare_simulation(times,np.tile(wave,(len(model.all),1)))
+              h.finitialize(-73); h.v_init=-73; h.run()
+
+              t=np.asarray(rt); vs=np.asarray(rs); peaks=soma_peaks(t,vs)
+              receiver_patterns=[]; event_peaks=[]
+              for meta,q in zip(shell,rv):
+                  v=np.asarray(q); vals=[]
+                  for sp in peaks:
+                      lo=max(0,sp-int(1/DT)); hi=min(len(t),sp+int(5/DT)+1)
+                      vals.append(float(np.max(v[lo:hi])))
+                  receiver_patterns.append(dict(section=meta[0],x=meta[1],distance_um=meta[2],
+                                                pattern=''.join('S' if z>-40 else 'F' for z in vals),peaks_mV=vals))
+              fracs=[]; labels=[]
+              for e in range(len(peaks)):
+                  frac=float(np.mean([r['pattern'][e]=='S' for r in receiver_patterns]))
+                  fracs.append(frac)
+                  labels.append('success' if frac>=CONS_SUCCESS else 'failure' if frac<=CONS_FAILURE else 'mixed')
+
+              # Gate-state summary 1 ms before each somatic spike, from recorded
+              # trajectory only; this does not affect classification.
+              state=[]
+              for e,sp in enumerate(peaks):
+                  idx=max(0,sp-int(1.0/DT))
+                  ss=[np.asarray(q)[idx] for q in rss]
+                  la=[np.asarray(q)[idx] for q in rla if len(q)>idx]
+                  state.append(dict(event=e+1,t_ms=float(t[idx]),label=labels[e],success_fraction=fracs[e],
+                                    mean_s_na3=float(np.mean(ss)) if ss else None,
+                                    mean_l_atype=float(np.mean(la)) if la else None,
+                                    mean_v_distal=float(np.mean([np.asarray(q)[idx] for q in rv]))))
+
+              out=dict(name=name,Nav_inactivation=Nav_inact,remove_atype=remove_atype,
+                       n_soma_spikes=len(peaks),shell_n=len(shell),event_times_ms=[float(t[p]) for p in peaks],
+                       success_fractions=fracs,labels=labels,
+                       consensus_pattern=''.join('S' if z=='success' else 'F' if z=='failure' else 'M' for z in labels),
+                       receiver_pattern_counts=dict(Counter(r['pattern'] for r in receiver_patterns)),
+                       state=state,receiver_patterns=receiver_patterns)
+              print('CONTROL_RESULT',name,json.dumps({k:v for k,v in out.items() if k not in ('state','receiver_patterns')},separators=(',',':')))
+              for z in state: print('CONTROL_STATE',name,json.dumps(z,separators=(',',':')))
+              return out
+
+          results=[]
+          results.append(run('released_baseline'))
+          # na3.mod: sinf = c + ar2*(1-c); ar2=1 makes sinf exactly 1,
+          # i.e. removes the slow-inactivation drive without removing NaV current.
+          results.append(run('no_slow_NaV_inactivation',nav_inact_override=[1,1,300,100]))
+          # Biologically grounded coarse intervention paralleling the paper's
+          # A-type blocker logic; not a subtle history freeze.
+          results.append(run('remove_A_type_KV',remove_atype=True))
+          json.dump(dict(results=results),open('/tmp/park_history_controls.json','w'),indent=2)
+          PY
+          python /tmp/park_history_controls.py | tee /tmp/park_history_controls.log
+
+      - name: Upload causal-control receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: park-history-causal-controls
+          path: |
+            /tmp/park_history_controls.json
+            /tmp/park_history_controls.log
+          if-no-files-found: error
+          retention-days: 14
