@@ -1,0 +1,143 @@
+name: Park exact two-compartment control
+
+on:
+  push:
+    paths:
+      - '.github/workflows/park-izhikevich-control.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install minimal dependencies
+        run: python -m pip install numpy python-docx
+
+      - name: Fetch exact Supplementary Software 2
+        shell: bash
+        run: |
+          set -euxo pipefail
+          URL='https://media.springernature.com/original/springer-static/esm/art%3A10.1038%2Fs41467-025-55819-9/MediaObjects/41467_2025_55819_MOESM8_ESM.zip'
+          curl -fL --retry 4 --retry-all-errors "$URL" -o park_software2.zip
+          unzip -q park_software2.zip -d park_software2
+          find park_software2 -maxdepth 3 -type f -print
+
+      - name: Print released README text cleanly
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from docx import Document
+          p=next(Path('park_software2').rglob('Readme_Izhikevich.docx'))
+          d=Document(p)
+          print('=== AUTHORS README ===')
+          for para in d.paragraphs:
+              s=para.text.strip()
+              if s: print(s)
+          for table in d.tables:
+              for row in table.rows:
+                  print(' | '.join(c.text.strip() for c in row.cells))
+          PY
+
+      - name: Execute literal MATLAB translation and predeclared controls
+        shell: bash
+        run: |
+          cat > /tmp/park_izhikevich.py <<'PY'
+          import json
+          import numpy as np
+
+          # Literal translation of the released Two_compartment_Izhikevich.m.
+          # Time is in the code's native units; the released README identifies
+          # the simulation as the two-compartment model for Fig. S18.
+          a=0.0025; b=0.01; c=-55.0; d=1.0
+          vmax=0.0; rho=1.0; cSoma=-65.0
+          Coupling=0.325
+          dt=0.001; steps=500_000
+
+          def run(gs=0.16, gd=0.0, freeze_u2=False, coupling=Coupling):
+              v=-75.0; v2=-75.0; u=-13.0; u2=-18.0
+              soma_sp=[]; dend_sp=[]
+              sample_t=[]; sample_v=[]; sample_v2=[]; sample_u2=[]
+              # The released code leaves soma u exactly frozen (u=u).
+              for i in range(1,steps+1):
+                  if i < steps/5 or i >= 0.8*steps:
+                      g1=g2=0.0
+                  else:
+                      g1=gs; g2=gd
+                  vold=v; v2old=v2
+                  v = v + dt*(0.04*v*v + 5*v + 140 - u - g1*v + (v2old-vold)*coupling/rho)
+                  # u = u, exactly as released.
+                  v2 = v2 + dt*(0.04*v2*v2 + 5*v2 + 140 - u2 - g2*v2 - (v2old-vold)*coupling)
+                  if not freeze_u2:
+                      u2 = u2 + dt*a*(b*v2-u2)
+                  t=i*dt
+                  if v >= 30.0:
+                      soma_sp.append(t)
+                      v=cSoma
+                      # released code does not increment soma u
+                  if v2 >= vmax:
+                      dend_sp.append(t)
+                      v2=c
+                      if not freeze_u2:
+                          u2 += d
+                  if i % 100 == 0:
+                      sample_t.append(t); sample_v.append(v); sample_v2.append(v2); sample_u2.append(u2)
+
+              # Pair each somatic event to at most one nearest following distal
+              # event within 5 native time units. This rule is predeclared here
+              # and reported alongside raw event times so it is auditable.
+              pattern=[]; delays=[]
+              j=0
+              for ts in soma_sp:
+                  while j < len(dend_sp) and dend_sp[j] < ts-0.5:
+                      j += 1
+                  if j < len(dend_sp) and -0.5 <= dend_sp[j]-ts <= 5.0:
+                      pattern.append('S'); delays.append(dend_sp[j]-ts); j += 1
+                  else:
+                      pattern.append('F'); delays.append(None)
+              return dict(gs=gs,gd=gd,freeze_u2=freeze_u2,coupling=coupling,
+                          soma_spike_times=soma_sp,dend_spike_times=dend_sp,
+                          n_soma=len(soma_sp),n_dend=len(dend_sp),pattern=''.join(pattern),delays=delays,
+                          sampled=dict(t=sample_t,v_soma=sample_v,v_dend=sample_v2,u2=sample_u2))
+
+          runs=[]
+          # Exact released defaults first.
+          runs.append(('released_default',run(0.16,0.0,False)))
+          # Exhaust the four alternatives explicitly listed in comments in the
+          # authors' released MATLAB file. This is not adaptive tuning.
+          for gs,gd in [(0.16,0.05),(0.30,0.0),(0.30,0.05)]:
+              runs.append((f'authors_comment_gs{gs}_gd{gd}',run(gs,gd,False)))
+          # V23 causal control: same released default but freeze the only dynamic
+          # dendritic recovery variable u2. Not an authors' condition.
+          runs.append(('V23_freeze_u2',run(0.16,0.0,True)))
+          # Spatial coupling necessity control, also V23 not authors' condition.
+          runs.append(('V23_no_coupling',run(0.16,0.0,False,coupling=0.0)))
+
+          compact=[]
+          for name,r in runs:
+              cpy={k:v for k,v in r.items() if k!='sampled'}
+              compact.append((name,cpy))
+              print('IZH_RESULT',name,json.dumps(cpy,separators=(',',':')))
+          with open('/tmp/park_izhikevich_results.json','w') as f:
+              json.dump(dict(runs=[dict(name=n,**r) for n,r in runs]),f,indent=2)
+          PY
+          python /tmp/park_izhikevich.py | tee /tmp/park_izhikevich.log
+
+      - name: Upload execution receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: park-izhikevich-control
+          path: |
+            /tmp/park_izhikevich_results.json
+            /tmp/park_izhikevich.log
+          if-no-files-found: error
+          retention-days: 14
