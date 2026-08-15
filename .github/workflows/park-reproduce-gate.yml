@@ -49,6 +49,11 @@ jobs:
           cp 'Model Robustness/ChannelsUnused/'*.mod modfiles/
           cp 'Model Robustness/ChannelsUsed/'*.inc modfiles/ 2>/dev/null || true
           cp 'Model Robustness/ChannelsUnused/'*.inc modfiles/ 2>/dev/null || true
+          # FullCA1Model hard-codes CheRiff=False and uses chr.mod.  The released
+          # but unused cheriff.mod contains a non-ASCII bibliography character
+          # that NEURON 8.2's NMODL translator rejects.  Exclude that unused
+          # mechanism rather than modifying the authors' channel kinetics.
+          rm -f modfiles/cheriff.mod
           nrnivmodl modfiles
 
       - name: Run published soma-step and widefield protocols without plotting
@@ -75,7 +80,6 @@ jobs:
           Nap_params = [1e-9, 1e-9, 300, 100]
           CalH_params = [1e-9, 1e-9, 300, 100]
           Somacar_params = [1e-9, 1e-9, 50, 30]
-          Car_params_default = [1e-9, 1e-9, 300, 100]
           Hcn_params = [1e-9, 1e-9, 200, 100]
           Km_params = [1e-9, 1e-9, 550, 100]
 
@@ -85,7 +89,6 @@ jobs:
 
           def crossings(t, v, threshold=0.0):
               ii=np.where((v[:-1] < threshold) & (v[1:] >= threshold))[0]+1
-              # collapse pathological duplicate crossings <1 ms apart
               keep=[]
               for i in ii:
                   if not keep or t[i]-t[keep[-1]] > 1.0:
@@ -102,7 +105,6 @@ jobs:
               model=FullCA1Model(channel_params, 'Jarsky', 100)
               secs=list(h.allsec())
               soma=secs[0](0.5)
-              # Re-establish soma origin, then choose non-axonal segment nearest 500 um.
               h.distance(0, soma)
               cand=[]
               for sec in secs:
@@ -119,9 +121,7 @@ jobs:
               rec_soma=h.Vector(); rec_soma.record(soma._ref_v)
               rec_dist=h.Vector(); rec_dist.record(distal._ref_v)
               rec_s=h.Vector(); rec_s.record(distal._ref_s_na3)
-              # At ~500 um this should be Kad territory; record l if available.
-              rec_l=h.Vector()
-              l_name=None
+              rec_l=h.Vector(); l_name=None
               for candidate in ('_ref_l_kad','_ref_l_kap'):
                   if hasattr(distal,candidate):
                       rec_l.record(getattr(distal,candidate)); l_name=candidate.replace('_ref_',''); break
@@ -139,7 +139,6 @@ jobs:
               ci=crossings(t,vs,0.0)
               events=[]
               for idx in ci:
-                  # locate local somatic peak and inspect distal response from 1 ms before to 5 ms after
                   lo=max(0,idx-int(1/dt)); hi=min(len(t),idx+int(5/dt)+1)
                   sp=lo+int(np.argmax(vs[lo:hi]))
                   dlo=max(0,sp-int(1/dt)); dhi=min(len(t),sp+int(5/dt)+1)
