@@ -1,0 +1,31 @@
+name: Park channel mechanism inspect
+
+on:
+  push:
+    paths:
+      - '.github/workflows/park-channel-mechanism-inspect.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch Supplementary Software 1 and print relevant mechanisms
+        shell: bash
+        run: |
+          set -euxo pipefail
+          URL='https://media.springernature.com/original/springer-static/esm/art%3A10.1038%2Fs41467-025-55819-9/MediaObjects/41467_2025_55819_MOESM7_ESM.zip'
+          curl -fL --retry 4 --retry-all-errors "$URL" -o park_software1.zip
+          unzip -q park_software1.zip -d park_software1
+          MODEL="$PWD/park_software1/Supplementary NEURON models/Conductance-based model"
+          find "$MODEL" -type f \( -iname 'na3.mod' -o -iname 'kad.mod' -o -iname 'kap.mod' \) -print | sort | while read f; do
+            echo "===== $f ====="
+            cat "$f"
+          done
+          echo '===== FullCA1Model channel assignment snippets ====='
+          grep -RniE 'na3|kad|kap|Nav_inactivation|Kad_params|Kap_params' "$MODEL/FullCA1Model.py" "$MODEL/Model Robustness"/*.py 2>/dev/null | head -n 400 || true
