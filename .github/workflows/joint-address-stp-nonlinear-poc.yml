@@ -1,0 +1,42 @@
+name: Joint address x STP local nonlinear POC
+
+on:
+  push:
+    paths:
+      - 'joint_address_stp_nonlinear_poc.py'
+      - '.github/workflows/joint-address-stp-nonlinear-poc.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nonlinear-poc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          python -m pip install numpy scipy
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Run one-seed nonlinear kill gate
+        run: |
+          python joint_address_stp_nonlinear_poc.py \
+            --seeds 1 \
+            --shuffles 40 \
+            --train-repeats 40 \
+            --test-repeats 100 \
+            --beta 2.0 \
+            --output /tmp/joint_address_stp_nonlinear_poc_result.json \
+            | tee /tmp/joint_address_stp_nonlinear_poc.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: joint-address-stp-local-nonlinear-poc
+          path: |
+            /tmp/joint_address_stp_nonlinear_poc_result.json
+            /tmp/joint_address_stp_nonlinear_poc.log
+          retention-days: 14
