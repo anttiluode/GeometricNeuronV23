@@ -1,0 +1,38 @@
+name: Park Supplementary Software 2 inspect
+
+on:
+  push:
+    paths:
+      - '.github/workflows/park-two-compartment-inspect.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch and inspect Supplementary Software 2
+        shell: bash
+        run: |
+          set -euxo pipefail
+          URL='https://media.springernature.com/original/springer-static/esm/art%3A10.1038%2Fs41467-025-55819-9/MediaObjects/41467_2025_55819_MOESM8_ESM.zip'
+          curl -fL --retry 4 --retry-all-errors "$URL" -o park_software2.zip
+          unzip -q park_software2.zip -d park_software2
+          echo '--- tree ---'
+          find park_software2 -maxdepth 5 -type f -printf '%10s  %p\n' | sort -k2
+          echo '--- text/code excerpts ---'
+          while IFS= read -r f; do
+            echo "===== $f ====="
+            sed -n '1,260p' "$f"
+          done < <(find park_software2 -maxdepth 5 -type f \( -iname '*.py' -o -iname '*.m' -o -iname '*.txt' -o -iname 'readme*' \) | sort)
+      - name: Upload untouched Software 2 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: park-2025-supplementary-software-2
+          path: park_software2.zip
+          if-no-files-found: error
+          retention-days: 7
